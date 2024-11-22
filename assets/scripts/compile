@@ -10,7 +10,7 @@ FILE=libonvif.egg-info
 if [ -d "$FILE" ]; then
     rm -R libonvif.egg-info
 fi
-pip install -v .
+pip install --break-system -v .
 
 cd ../libavio
 FILE=build
@@ -21,7 +21,7 @@ FILE=avio.egg-info
 if [ -d "$FILE" ]; then
     rm -R avio.egg-info
 fi
-pip install -v .
+pip install --break-system -v .
 
 cd ../liblivemedia
 FILE=build
@@ -32,7 +32,7 @@ FILE=liblivemedia.egg-info
 if [ -d "$FILE" ]; then
     rm -R liblivemedia.egg-info
 fi
-pip install -v .
+pip install --break-system -v .
 
 cd ../kankakee
 FILE=build
@@ -43,7 +43,7 @@ FILE=kankakee.egg-info
 if [ -d "$FILE" ]; then
     rm -R kankakee.egg-info
 fi
-pip install -v .
+pip install --break-system -v .
 
 cd ../onvif-gui
 FILE=build
@@ -54,5 +54,5 @@ FILE=onvif_gui.egg-info
 if [ -d "$FILE" ]; then
     rm -R onvif_gui.egg-info
 fi
-pip install .
+pip install --break-system .
 cd ..
