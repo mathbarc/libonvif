@@ -13,3 +13,5 @@ share/
 runs/
 models/
 .DS_Store
+compile_commands.json
+.clang-format
