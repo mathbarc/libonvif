@@ -1,5 +1,5 @@
-#/********************************************************************
-# libonvif/onvif-gui/gui/onvif/ptztab.py 
+# /********************************************************************
+# libonvif/onvif-gui/gui/onvif/ptztab.py
 #
 # Copyright (c) 2023  Stephen Rhodes
 #
@@ -15,10 +15,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-#*********************************************************************/
+# *********************************************************************/
 
 from PyQt6.QtWidgets import QPushButton, QGridLayout, QWidget, QCheckBox
 from gui.enums import ProxyType
+from loguru import logger
+
 
 class PTZTab(QWidget):
     def __init__(self, cp):
@@ -43,47 +45,47 @@ class PTZTab(QWidget):
 
         self.btnLeft = QPushButton("<")
         self.btnLeft.setMaximumWidth(52)
-        self.btnLeft.pressed.connect(   lambda x=-0.5, y=0.0,  z=0.0 : self.move(x, y, z))
+        self.btnLeft.pressed.connect(lambda x=-1, y=0.0, z=0.0: self.move(x, y, z))
         self.btnLeft.released.connect(self.stopPanTilt)
         self.btnRight = QPushButton(">")
         self.btnRight.setMaximumWidth(52)
-        self.btnRight.pressed.connect(  lambda x=0.5,  y=0.0,  z=0.0 : self.move(x, y, z))
+        self.btnRight.pressed.connect(lambda x=1, y=0.0, z=0.0: self.move(x, y, z))
         self.btnRight.released.connect(self.stopPanTilt)
         self.btnUp = QPushButton("^")
         self.btnUp.setMaximumWidth(52)
-        self.btnUp.pressed.connect(     lambda x=0.0,  y=0.5,  z=0.0 : self.move(x, y, z))
+        self.btnUp.pressed.connect(lambda x=0.0, y=1, z=0.0: self.move(x, y, z))
         self.btnUp.released.connect(self.stopPanTilt)
         self.btnDown = QPushButton("v")
         self.btnDown.setMaximumWidth(52)
-        self.btnDown.pressed.connect(   lambda x=0.0,  y=-0.5, z=0.0 : self.move(x, y, z))
+        self.btnDown.pressed.connect(lambda x=0.0, y=-1, z=0.0: self.move(x, y, z))
         self.btnDown.released.connect(self.stopPanTilt)
         self.btnZoomIn = QPushButton("+")
         self.btnZoomIn.setMaximumWidth(52)
-        self.btnZoomIn.pressed.connect( lambda x=0.0,  y=0.0,  z=0.5 : self.move(x, y, z))
+        self.btnZoomIn.pressed.connect(lambda x=0.0, y=0.0, z=1: self.move(x, y, z))
         self.btnZoomIn.released.connect(self.stopZoom)
         self.btnZoomOut = QPushButton("-")
         self.btnZoomOut.setMaximumWidth(52)
-        self.btnZoomOut.pressed.connect( lambda x=0.0,  y=0.0, z=-0.5 : self.move(x, y, z))
+        self.btnZoomOut.pressed.connect(lambda x=0.0, y=0.0, z=-1: self.move(x, y, z))
         self.btnZoomOut.released.connect(self.stopZoom)
 
         self.chkSet = QCheckBox("Set Preset Position")
 
         lytMain = QGridLayout(self)
-        lytMain.addWidget(self.btn1,   0, 0, 1, 1)
-        lytMain.addWidget(self.btn2,   1, 0, 1, 1)
-        lytMain.addWidget(self.btn3,   2, 0, 1, 1)
-        lytMain.addWidget(self.btn4,   3, 0, 1, 1)
-        lytMain.addWidget(self.btn5,   4, 0, 1, 1)
+        lytMain.addWidget(self.btn1, 0, 0, 1, 1)
+        lytMain.addWidget(self.btn2, 1, 0, 1, 1)
+        lytMain.addWidget(self.btn3, 2, 0, 1, 1)
+        lytMain.addWidget(self.btn4, 3, 0, 1, 1)
+        lytMain.addWidget(self.btn5, 4, 0, 1, 1)
 
-        lytMain.addWidget(self.btnLeft,    1, 2, 1, 1)
-        lytMain.addWidget(self.btnUp,      0, 3, 1, 1)
-        lytMain.addWidget(self.btnDown,    2, 3, 1, 1)
-        lytMain.addWidget(self.btnRight,   1, 4, 1, 1)
+        lytMain.addWidget(self.btnLeft, 1, 2, 1, 1)
+        lytMain.addWidget(self.btnUp, 0, 3, 1, 1)
+        lytMain.addWidget(self.btnDown, 2, 3, 1, 1)
+        lytMain.addWidget(self.btnRight, 1, 4, 1, 1)
 
-        lytMain.addWidget(self.btnZoomIn,  3, 4, 1, 1)
+        lytMain.addWidget(self.btnZoomIn, 3, 4, 1, 1)
         lytMain.addWidget(self.btnZoomOut, 4, 4, 1, 1)
 
-        lytMain.addWidget(self.chkSet,     4, 1, 1, 3)
+        lytMain.addWidget(self.chkSet, 4, 1, 1, 3)
 
     def presetButtonClicked(self, n):
         camera = self.cp.getCurrentCamera()
@@ -138,3 +140,4 @@ class PTZTab(QWidget):
     def fill(self, onvif_data):
         self.setEnabled(True)
         self.chkSet.setChecked(False)
+
