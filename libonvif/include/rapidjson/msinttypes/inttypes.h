@@ -56,14 +56,13 @@
 
 typedef struct
 {
-        intmax_t quot;
-        intmax_t rem;
+    intmax_t quot;
+    intmax_t rem;
 } imaxdiv_t;
 
 // 7.8.1 Macros for format specifiers
 
-#if !defined(__cplusplus) ||                                                   \
-    defined(__STDC_FORMAT_MACROS) // [   See footnote 185 at page 198
+#if !defined(__cplusplus) || defined(__STDC_FORMAT_MACROS) // [   See footnote 185 at page 198
 
 // The fprintf macros for signed integers are:
 #define PRId8 "d"
@@ -286,9 +285,9 @@ typedef struct
 // in %MSVC.NET%\crt\src\div.c
 #ifdef STATIC_IMAXDIV // [
 static
-#else                 // STATIC_IMAXDIV ][
+#else // STATIC_IMAXDIV ][
 _inline
-#endif                // STATIC_IMAXDIV ]
+#endif // STATIC_IMAXDIV ]
     imaxdiv_t __cdecl imaxdiv(intmax_t numer, intmax_t denom)
 {
     imaxdiv_t result;
@@ -296,12 +295,11 @@ _inline
     result.quot = numer / denom;
     result.rem = numer % denom;
 
-    if (numer < 0 && result.rem > 0)
-        {
-            // did division wrong; must fix up
-            ++result.quot;
-            result.rem -= denom;
-        }
+    if (numer < 0 && result.rem > 0) {
+        // did division wrong; must fix up
+        ++result.quot;
+        result.rem -= denom;
+    }
 
     return result;
 }

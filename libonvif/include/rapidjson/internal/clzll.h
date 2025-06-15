@@ -30,8 +30,7 @@
 #endif
 
 RAPIDJSON_NAMESPACE_BEGIN
-namespace internal
-{
+namespace internal {
 
     inline uint32_t clzll(uint64_t x)
     {
@@ -53,18 +52,16 @@ namespace internal
 #endif // _WIN64
 
         return 63 - r;
-#elif (defined(__GNUC__) && __GNUC__ >= 4) ||                                  \
-    RAPIDJSON_HAS_BUILTIN(__builtin_clzll)
+#elif (defined(__GNUC__) && __GNUC__ >= 4) || RAPIDJSON_HAS_BUILTIN(__builtin_clzll)
         // __builtin_clzll wrapper
         return static_cast<uint32_t>(__builtin_clzll(x));
 #else
         // naive version
         uint32_t r = 0;
-        while (!(x & (static_cast<uint64_t>(1) << 63)))
-            {
-                x <<= 1;
-                ++r;
-            }
+        while (!(x & (static_cast<uint64_t>(1) << 63))) {
+            x <<= 1;
+            ++r;
+        }
 
         return r;
 #endif // _MSC_VER
