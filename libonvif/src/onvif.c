@@ -55,28 +55,21 @@
 #include <errno.h>
 #include <stdint.h>
 
-#define INT_TO_ADDR(_addr)                                     \
-    (_addr & 0xFF), (_addr >> 8 & 0xFF), (_addr >> 16 & 0xFF), \
+#define INT_TO_ADDR(_addr)    \
+    (_addr & 0xFF),           \
+        (_addr >> 8 & 0xFF),  \
+        (_addr >> 16 & 0xFF), \
         (_addr >> 24 & 0xFF)
 
 xmlDocPtr sendCommandToCamera(char* cmd, char* xaddrs);
 void getBase64(unsigned char* buffer, int chunk_size, unsigned char* result);
 void getUUID(char uuid_buf[47]);
-void addUsernameDigestHeader(
-    xmlNodePtr root, xmlNsPtr ns_env, char* user, char* password, time_t offset
-);
-void addHttpHeader(
-    xmlDocPtr doc, xmlNodePtr root, char* xaddrs, char* post_type, char cmd[],
-    int cmd_length
-);
+void addUsernameDigestHeader(xmlNodePtr root, xmlNsPtr ns_env, char* user, char* password, time_t offset);
+void addHttpHeader(xmlDocPtr doc, xmlNodePtr root, char* xaddrs, char* post_type, char cmd[], int cmd_length);
 int checkForXmlErrorMsg(xmlDocPtr doc, char error_msg[1024]);
 int getXmlValue(xmlDocPtr doc, xmlChar* xpath, char buf[], int buf_length);
-int getNodeAttributen(
-    xmlDocPtr doc, xmlChar* xpath, xmlChar* attribute, char buf[],
-    int buf_length, int profileIndex
-);
-#define getNodeAttribute(doc, xpath, attribute, buf, buf_length) \
-    getNodeAttributen(doc, xpath, attribute, buf, buf_length, 0)
+int getNodeAttributen(xmlDocPtr doc, xmlChar* xpath, xmlChar* attribute, char buf[], int buf_length, int profileIndex);
+#define getNodeAttribute(doc, xpath, attribute, buf, buf_length) getNodeAttributen(doc, xpath, attribute, buf, buf_length, 0)
 xmlXPathObjectPtr getNodeSet(xmlDocPtr doc, xmlChar* xpath);
 
 const int SHA1_DIGEST_SIZE = 20;
@@ -84,44 +77,29 @@ char preferred_network_address[16];
 static bool dump_reply = false;
 static void dumpReply(xmlDocPtr reply);
 
+static bool rand_seeded = false;
+
 int getNetworkInterfaces(struct OnvifData* onvif_data)
 {
     memset(onvif_data->ip_address_buf, 0, sizeof(onvif_data->ip_address_buf));
-    memset(
-        onvif_data->networkInterfaceToken, 0,
-        sizeof(onvif_data->networkInterfaceToken)
-    );
-    memset(
-        onvif_data->networkInterfaceName, 0,
-        sizeof(onvif_data->networkInterfaceName)
-    );
+    memset(onvif_data->networkInterfaceToken, 0, sizeof(onvif_data->networkInterfaceToken));
+    memset(onvif_data->networkInterfaceName, 0, sizeof(onvif_data->networkInterfaceName));
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_tds, BAD_CAST "GetNetworkInterfaces", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
-        xmlChar* xpath = BAD_CAST "//s:Body//tds:GetNetworkInterfacesResponse//"
-                                  "tds:NetworkInterfaces";
+        xmlChar* xpath = BAD_CAST "//s:Body//tds:GetNetworkInterfacesResponse//tds:NetworkInterfaces";
         xmlNodeSetPtr nodeset;
         xmlChar* enabled = NULL;
         xmlXPathObjectPtr xml_result = getNodeSet(reply, xpath);
@@ -135,8 +113,7 @@ int getNetworkInterfaces(struct OnvifData* onvif_data)
 
                 bool dhcp = false;
                 char isDHCP[128] = { 0 };
-                xpath = BAD_CAST "//tds:NetworkInterfaces//tt:IPv4/"
-                                 "/tt:Config//tt:DHCP";
+                xpath = BAD_CAST "//tds:NetworkInterfaces//tt:IPv4//tt:Config//tt:DHCP";
                 if (getXmlValue(temp_doc, xpath, isDHCP, 128) == 0) {
                     if (strcmp(isDHCP, "true") == 0) {
                         dhcp = true;
@@ -147,56 +124,27 @@ int getNetworkInterfaces(struct OnvifData* onvif_data)
                 xmlChar* xpath_address;
                 xmlChar* xpath_prefix;
                 if (dhcp) {
-                    xpath_address = BAD_CAST
-                        "//tds:NetworkInterfaces//tt:IPv4//"
-                        "tt:Config//tt:FromDHCP//tt:Address";
-                    xpath_prefix = BAD_CAST "//tds:NetworkInterfaces//"
-                                            "tt:IPv4//tt:Config//"
-                                            "tt:FromDHCP//tt:PrefixLength";
+                    xpath_address = BAD_CAST "//tds:NetworkInterfaces//tt:IPv4//tt:Config//tt:FromDHCP//tt:Address";
+                    xpath_prefix = BAD_CAST "//tds:NetworkInterfaces//tt:IPv4//tt:Config//tt:FromDHCP//tt:PrefixLength";
                 } else {
-                    xpath_address = BAD_CAST
-                        "//tds:NetworkInterfaces//tt:IPv4//"
-                        "tt:Config//tt:Manual//tt:Address";
-                    xpath_prefix = BAD_CAST
-                        "//tds:NetworkInterfaces//tt:IPv4//"
-                        "tt:Config//tt:Manual//tt:PrefixLength";
+                    xpath_address = BAD_CAST "//tds:NetworkInterfaces//tt:IPv4//tt:Config//tt:Manual//tt:Address";
+                    xpath_prefix = BAD_CAST "//tds:NetworkInterfaces//tt:IPv4//tt:Config//tt:Manual//tt:PrefixLength";
                 }
 
                 char ip_address_buf[128] = { 0 };
-                if (getXmlValue(
-                        temp_doc, xpath_address, ip_address_buf, 128
-                    )
-                    == 0) {
+                if (getXmlValue(temp_doc, xpath_address, ip_address_buf, 128) == 0) {
                     char host[128] = { 0 };
                     extractHost(onvif_data->xaddrs, host);
 
                     if (strcmp(ip_address_buf, host) == 0) {
-                        strcpy(
-                            onvif_data->ip_address_buf,
-                            ip_address_buf
-                        );
-                        strcpy(
-                            onvif_data
-                                ->networkInterfaceToken,
-                            (char*)token
-                        );
+                        strcpy(onvif_data->ip_address_buf, ip_address_buf);
+                        strcpy(onvif_data->networkInterfaceToken, (char*)token);
                         char prefix_length_buf[128];
-                        if (getXmlValue(
-                                temp_doc, xpath_prefix,
-                                prefix_length_buf, 128
-                            )
-                            == 0) {
+                        if (getXmlValue(temp_doc, xpath_prefix, prefix_length_buf, 128) == 0) {
                             onvif_data->prefix_length = atoi(prefix_length_buf);
                         }
-                        xpath = BAD_CAST
-                            "//tds:NetworkInterfaces//"
-                            "tt:Info//tt:Name";
-                        getXmlValue(
-                            temp_doc, xpath,
-                            onvif_data
-                                ->networkInterfaceName,
-                            128
-                        );
+                        xpath = BAD_CAST "//tds:NetworkInterfaces//tt:Info//tt:Name";
+                        getXmlValue(temp_doc, xpath, onvif_data->networkInterfaceName, 128);
                         i = nodeset->nodeNr;
                     }
                 }
@@ -216,9 +164,7 @@ int getNetworkInterfaces(struct OnvifData* onvif_data)
         xmlFreeDoc(reply);
     } else {
         result = -1;
-        strcpy(
-            onvif_data->last_error, "getNetworkInterfaces - No XML reply"
-        );
+        strcpy(onvif_data->last_error, "getNetworkInterfaces - No XML reply");
     }
     return result;
     return 0;
@@ -231,55 +177,31 @@ int setNetworkInterfaces(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr setNetworkInterfaces = xmlNewTextChild(body, ns_tds, BAD_CAST "SetNetworkInterfaces", NULL);
-    xmlNewTextChild(
-        setNetworkInterfaces, ns_tt, BAD_CAST "InterfaceToken",
-        BAD_CAST onvif_data->networkInterfaceName
-    );
-    xmlNodePtr networkInterface = xmlNewTextChild(
-        setNetworkInterfaces, ns_tt, BAD_CAST "NetworkInterface", NULL
-    );
+    xmlNewTextChild(setNetworkInterfaces, ns_tt, BAD_CAST "InterfaceToken", BAD_CAST onvif_data->networkInterfaceName);
+    xmlNodePtr networkInterface = xmlNewTextChild(setNetworkInterfaces, ns_tt, BAD_CAST "NetworkInterface", NULL);
     xmlNodePtr ipv4 = xmlNewTextChild(networkInterface, ns_tt, BAD_CAST "IPv4", NULL);
     if (onvif_data->dhcp_enabled) {
         xmlNewTextChild(ipv4, ns_tt, BAD_CAST "DHCP", BAD_CAST "true");
     } else {
         xmlNewTextChild(ipv4, ns_tt, BAD_CAST "DHCP", BAD_CAST "false");
         xmlNodePtr manual = xmlNewTextChild(ipv4, ns_tt, BAD_CAST "Manual", NULL);
-        xmlNewTextChild(
-            manual, ns_tt, BAD_CAST "Address",
-            BAD_CAST onvif_data->ip_address_buf
-        );
+        xmlNewTextChild(manual, ns_tt, BAD_CAST "Address", BAD_CAST onvif_data->ip_address_buf);
         char prefix_length_buf[128];
         sprintf(prefix_length_buf, "%d", onvif_data->prefix_length);
-        xmlNewTextChild(
-            manual, ns_tt, BAD_CAST "PrefixLength",
-            BAD_CAST prefix_length_buf
-        );
+        xmlNewTextChild(manual, ns_tt, BAD_CAST "PrefixLength", BAD_CAST prefix_length_buf);
     }
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
-        xmlChar* xpath = BAD_CAST
-            "//s:Body//tds:SetNetworkInterfacesResponse//tds:RebootNeeded";
+        xmlChar* xpath = BAD_CAST "//s:Body//tds:SetNetworkInterfacesResponse//tds:RebootNeeded";
         char rebootNeeded[128];
         if (getXmlValue(reply, xpath, rebootNeeded, 128) == 0) {
             if (strcmp(rebootNeeded, "true") == 0) {
@@ -293,46 +215,30 @@ int setNetworkInterfaces(struct OnvifData* onvif_data)
         xmlFreeDoc(reply);
     } else {
         result = -1;
-        strcpy(
-            onvif_data->last_error, "setNetworkInterfaces - No XML reply"
-        );
+        strcpy(onvif_data->last_error, "setNetworkInterfaces - No XML reply");
     }
     return result;
 }
 
 int getNetworkDefaultGateway(struct OnvifData* onvif_data)
 {
-    memset(
-        onvif_data->default_gateway_buf, 0,
-        sizeof(onvif_data->default_gateway_buf)
-    );
+    memset(onvif_data->default_gateway_buf, 0, sizeof(onvif_data->default_gateway_buf));
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_tds, BAD_CAST "GetNetworkDefaultGateway", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
-        xmlChar* xpath = BAD_CAST "//s:Body//tds:GetNetworkDefaultGatewayResponse//"
-                                  "tds:NetworkGateway//tt:IPv4Address";
+        xmlChar* xpath = BAD_CAST "//s:Body//tds:GetNetworkDefaultGatewayResponse//tds:NetworkGateway//tt:IPv4Address";
         getXmlValue(reply, xpath, onvif_data->default_gateway_buf, 128);
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
         if (result < 0)
@@ -340,10 +246,7 @@ int getNetworkDefaultGateway(struct OnvifData* onvif_data)
         xmlFreeDoc(reply);
     } else {
         result = -1;
-        strcpy(
-            onvif_data->last_error,
-            "getNetworkDefaultGateway - No XML reply"
-        );
+        strcpy(onvif_data->last_error, "getNetworkDefaultGateway - No XML reply");
     }
     return result;
 }
@@ -355,33 +258,16 @@ int setNetworkDefaultGateway(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr setNetworkDefaultGateway = xmlNewTextChild(
-        body, ns_tds, BAD_CAST "SetNetworkDefaultGateway", NULL
-    );
-    xmlNewTextChild(
-        setNetworkDefaultGateway, ns_tt, BAD_CAST "IPv4Address",
-        BAD_CAST onvif_data->default_gateway_buf
-    );
+    xmlNodePtr setNetworkDefaultGateway = xmlNewTextChild(body, ns_tds, BAD_CAST "SetNetworkDefaultGateway", NULL);
+    xmlNewTextChild(setNetworkDefaultGateway, ns_tt, BAD_CAST "IPv4Address", BAD_CAST onvif_data->default_gateway_buf);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -390,10 +276,7 @@ int setNetworkDefaultGateway(struct OnvifData* onvif_data)
         xmlFreeDoc(reply);
     } else {
         result = -1;
-        strcpy(
-            onvif_data->last_error,
-            "setNetworkDefaultGateway - No XML reply"
-        );
+        strcpy(onvif_data->last_error, "setNetworkDefaultGateway - No XML reply");
     }
     return result;
 }
@@ -406,48 +289,25 @@ int getDNS(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_tds, BAD_CAST "GetDNS", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
-        xmlChar* xpath = BAD_CAST
-            "//s:Body//tds:GetDNSResponse//tds:DNSInformation//tt:FromDHCP";
+        xmlChar* xpath = BAD_CAST "//s:Body//tds:GetDNSResponse//tds:DNSInformation//tt:FromDHCP";
         char fromDHCP[128];
         if (getXmlValue(reply, xpath, fromDHCP, 128) == 0) {
             if (strcmp(fromDHCP, "true") == 0) {
-                xpath = BAD_CAST "//s:Body//tds:GetDNSResponse//"
-                                 "tds:DNSInformation//"
-                                 "tt:DNSFromDHCP//tt:IPv4Address";
-                if (getXmlValue(
-                        reply, xpath, onvif_data->dns_buf, 128
-                    )
-                    == 0) {
-                }
+                xpath = BAD_CAST "//s:Body//tds:GetDNSResponse//tds:DNSInformation//tt:DNSFromDHCP//tt:IPv4Address";
+                if (getXmlValue(reply, xpath, onvif_data->dns_buf, 128) == 0) { }
             } else {
-                xpath = BAD_CAST "//s:Body//tds:GetDNSResponse//"
-                                 "tds:DNSInformation//tt:DNSManual/"
-                                 "/tt:IPv4Address";
-                if (getXmlValue(
-                        reply, xpath, onvif_data->dns_buf, 128
-                    )
-                    == 0) {
-                }
+                xpath = BAD_CAST "//s:Body//tds:GetDNSResponse//tds:DNSInformation//tt:DNSManual//tt:IPv4Address";
+                if (getXmlValue(reply, xpath, onvif_data->dns_buf, 128) == 0) { }
             }
         }
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -479,39 +339,22 @@ int setDNS(struct OnvifData* onvif_data)
         strcat(onvif_data->last_error, " setDNS");
 
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr setDNS = xmlNewTextChild(body, ns_tds, BAD_CAST "SetDNS", NULL);
     if (!onvif_data->dhcp_enabled) {
         xmlNodePtr dnsManual = xmlNewTextChild(setDNS, ns_tds, BAD_CAST "DNSManual", NULL);
         xmlNewTextChild(dnsManual, ns_tt, BAD_CAST "Type", BAD_CAST "IPv4");
-        xmlNewTextChild(
-            dnsManual, ns_tt, BAD_CAST "IPv4Address",
-            BAD_CAST onvif_data->dns_buf
-        );
+        xmlNewTextChild(dnsManual, ns_tt, BAD_CAST "IPv4Address", BAD_CAST onvif_data->dns_buf);
     } else {
-        xmlNewTextChild(
-            setDNS, ns_tds, BAD_CAST "FromDHCP", BAD_CAST fromDHCP_buf
-        );
+        xmlNewTextChild(setDNS, ns_tds, BAD_CAST "FromDHCP", BAD_CAST fromDHCP_buf);
     }
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -532,24 +375,14 @@ int getNTP(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_tds, BAD_CAST "GetNTP", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         xmlChar* xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//tt:FromDHCP";
@@ -557,33 +390,25 @@ int getNTP(struct OnvifData* onvif_data)
         getXmlValue(reply, xpath, ntp_buf, 128);
         if (strcmp(ntp_buf, "true") == 0) {
             onvif_data->ntp_dhcp = true;
-            xpath = BAD_CAST
-                "//s:Body//tds:GetNTPResponse//tt:NTPFromDHCP//tt:Type";
+            xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//tt:NTPFromDHCP//tt:Type";
             getXmlValue(reply, xpath, onvif_data->ntp_type, 128);
             if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
-                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
-                                 "tt:NTPFromDHCP//tt:IPv4Address";
+                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//tt:NTPFromDHCP//tt:IPv4Address";
             else if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
-                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
-                                 "tt:NTPFromDHCP//tt:IPv6Address";
+                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//tt:NTPFromDHCP//tt:IPv6Address";
             else
-                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
-                                 "tt:NTPFromDHCP//tt:DNSname";
+                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//tt:NTPFromDHCP//tt:DNSname";
             getXmlValue(reply, xpath, onvif_data->ntp_addr, 128);
         } else {
             onvif_data->ntp_dhcp = false;
-            xpath = BAD_CAST
-                "//s:Body//tds:GetNTPResponse//tt:NTPManual//tt:Type";
+            xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//tt:NTPManual//tt:Type";
             getXmlValue(reply, xpath, onvif_data->ntp_type, 128);
             if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
-                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
-                                 "tt:NTPManual//tt:IPv4Address";
+                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//tt:NTPManual//tt:IPv4Address";
             else if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
-                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
-                                 "tt:NTPManual//tt:IPv6Address";
+                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//tt:NTPManual//tt:IPv6Address";
             else
-                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
-                                 "tt:NTPManual//tt:DNSname";
+                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//tt:NTPManual//tt:DNSname";
             getXmlValue(reply, xpath, onvif_data->ntp_addr, 128);
         }
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -611,60 +436,37 @@ int setNTP(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr setNTP = xmlNewTextChild(body, ns_tds, BAD_CAST "SetNTP", NULL);
 
     xmlNewTextChild(setNTP, ns_tds, BAD_CAST "FromDHCP", BAD_CAST fromDHCP_buf);
     if (!onvif_data->ntp_dhcp) {
         xmlNodePtr ntpManual = xmlNewTextChild(setNTP, ns_tds, BAD_CAST "NTPManual", NULL);
-        // xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "Type", BAD_CAST
-        // "IPv4"); xmlNewTextChild(ntpManual, ns_tt, BAD_CAST
-        // "IPv4Address", BAD_CAST "10.1.1.16");
+        // xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "Type", BAD_CAST "IPv4");
+        // xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "IPv4Address", BAD_CAST "10.1.1.16");
 
-        // xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "Type", BAD_CAST
-        // "DNS"); xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "DNSname",
-        // BAD_CAST "time.windows.com");
+        // xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "Type", BAD_CAST "DNS");
+        // xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "DNSname", BAD_CAST "time.windows.com");
 
         /**/
-        xmlNewTextChild(
-            ntpManual, ns_tt, BAD_CAST "Type", BAD_CAST onvif_data->ntp_type
-        );
+        xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "Type", BAD_CAST onvif_data->ntp_type);
         if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
-            xmlNewTextChild(
-                ntpManual, ns_tt, BAD_CAST "IPv4Address",
-                BAD_CAST onvif_data->ntp_addr
-            );
+            xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "IPv4Address", BAD_CAST onvif_data->ntp_addr);
         // else if (strcmp(onvif_data->ntp_type,"IPv6") == 0)
-        //	xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "IPv6Address",
-        // BAD_CAST onvif_data->ntp_addr);
+        //	xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "IPv6Address", BAD_CAST onvif_data->ntp_addr);
         else
-            xmlNewTextChild(
-                ntpManual, ns_tt, BAD_CAST "DNSname",
-                BAD_CAST onvif_data->ntp_addr
-            );
+            xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "DNSname", BAD_CAST onvif_data->ntp_addr);
         /**/
     }
     // dumpReply(doc);
 
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -685,30 +487,18 @@ int getHostname(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_tds, BAD_CAST "GetHostname", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
-        xmlChar* xpath = BAD_CAST "//s:Body//tds:GetHostnameResponse//"
-                                  "tds:HostnameInformation//tt:FromDHCP";
-        xpath = BAD_CAST "//s:Body//tds:GetHostnameResponse//"
-                         "tds:HostnameInformation//tt:Name";
+        xmlChar* xpath = BAD_CAST "//s:Body//tds:GetHostnameResponse//tds:HostnameInformation//tt:FromDHCP";
+        xpath = BAD_CAST "//s:Body//tds:GetHostnameResponse//tds:HostnameInformation//tt:Name";
         getXmlValue(reply, xpath, onvif_data->host_name, 128);
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
         if (result < 0)
@@ -729,42 +519,23 @@ int setHostname(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     if (onvif_data->host_name[0]) {
         xmlNodePtr setHostname = xmlNewTextChild(body, ns_tds, BAD_CAST "SetHostname", NULL);
-        xmlNewTextChild(
-            setHostname, ns_tds, BAD_CAST "Name",
-            BAD_CAST onvif_data->host_name
-        );
+        xmlNewTextChild(setHostname, ns_tds, BAD_CAST "Name", BAD_CAST onvif_data->host_name);
         /* Do I also need to set FromDHCP to false ? */
     } else {
-        xmlNodePtr setHostname = xmlNewTextChild(
-            body, ns_tds, BAD_CAST "SetHostnameFromDHCP", NULL
-        );
-        xmlNewTextChild(
-            setHostname, ns_tds, BAD_CAST "FromDHCP", BAD_CAST "true"
-        );
+        xmlNodePtr setHostname = xmlNewTextChild(body, ns_tds, BAD_CAST "SetHostnameFromDHCP", NULL);
+        xmlNewTextChild(setHostname, ns_tds, BAD_CAST "FromDHCP", BAD_CAST "true");
     }
 
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         /* Should check for RebootNeeded=true from setHostnameFronDHCP */
@@ -791,18 +562,10 @@ int getCapabilities(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr capabilities = xmlNewTextChild(body, ns_tds, BAD_CAST "GetCapabilities", NULL);
     xmlNewTextChild(capabilities, ns_tds, BAD_CAST "Category", BAD_CAST "All");
@@ -811,30 +574,24 @@ int getCapabilities(struct OnvifData* onvif_data)
     strcpy(onvif_data->device_service, onvif_data->xaddrs);
     extractOnvifService(onvif_data->device_service, true);
 
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         xmlChar* xpath;
 
-        xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//"
-                         "tds:Capabilities//tt:Events//tt:XAddr";
+        xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//tds:Capabilities//tt:Events//tt:XAddr";
         if (getXmlValue(reply, xpath, onvif_data->event_service, 1024) == 0)
             extractOnvifService(onvif_data->event_service, true);
 
-        xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//"
-                         "tds:Capabilities//tt:Imaging//tt:XAddr";
+        xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//tds:Capabilities//tt:Imaging//tt:XAddr";
         if (getXmlValue(reply, xpath, onvif_data->imaging_service, 1024) == 0)
             extractOnvifService(onvif_data->imaging_service, true);
 
-        xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//"
-                         "tds:Capabilities//tt:Media//tt:XAddr";
+        xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//tds:Capabilities//tt:Media//tt:XAddr";
         if (getXmlValue(reply, xpath, onvif_data->media_service, 1024) == 0)
             extractOnvifService(onvif_data->media_service, true);
 
-        xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//"
-                         "tds:Capabilities//tt:PTZ//tt:XAddr";
+        xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//tds:Capabilities//tt:PTZ//tt:XAddr";
         if (getXmlValue(reply, xpath, onvif_data->ptz_service, 1024) == 0)
             extractOnvifService(onvif_data->ptz_service, true);
 
@@ -854,53 +611,29 @@ int getVideoEncoderConfigurationOptions(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     for (int i = 0; i < 16; i++) {
-        memset(
-            onvif_data->resolutions_buf[i], 0,
-            sizeof(onvif_data->resolutions_buf[i])
-        );
+        memset(onvif_data->resolutions_buf[i], 0, sizeof(onvif_data->resolutions_buf[i]));
     }
     int result = 0;
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_trt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_trt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr getVideoEncoderConfigurationOptions = xmlNewTextChild(
-        body, ns_trt, BAD_CAST "GetVideoEncoderConfigurationOptions", NULL
-    );
+    xmlNodePtr getVideoEncoderConfigurationOptions = xmlNewTextChild(body, ns_trt, BAD_CAST "GetVideoEncoderConfigurationOptions", NULL);
     if (onvif_data->videoEncoderConfigurationToken[0])
-        xmlNewTextChild(
-            getVideoEncoderConfigurationOptions, ns_trt,
-            BAD_CAST "ConfigurationToken",
-            BAD_CAST onvif_data->videoEncoderConfigurationToken
-        );
+        xmlNewTextChild(getVideoEncoderConfigurationOptions, ns_trt, BAD_CAST "ConfigurationToken", BAD_CAST onvif_data->videoEncoderConfigurationToken);
     if (onvif_data->profileToken[0])
-        xmlNewTextChild(
-            getVideoEncoderConfigurationOptions, ns_trt,
-            BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken
-        );
+        xmlNewTextChild(getVideoEncoderConfigurationOptions, ns_trt, BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         xmlChar* width = NULL;
         xmlChar* height = NULL;
-        xmlChar* xpath = BAD_CAST
-            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-            "trt:Options//tt:H264//tt:ResolutionsAvailable";
+        xmlChar* xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//trt:Options//tt:H264//tt:ResolutionsAvailable";
         xmlNodeSetPtr nodeset;
         xmlXPathObjectPtr xml_result = getNodeSet(reply, xpath);
         int k = 0;
@@ -909,32 +642,16 @@ int getVideoEncoderConfigurationOptions(struct OnvifData* onvif_data)
             for (int i = 0; i < nodeset->nodeNr; i++) {
                 xmlNodePtr cur = nodeset->nodeTab[i]->children;
                 while (cur != NULL) {
-                    if ((!xmlStrcmp(
-                            cur->name, (const xmlChar*)"Width"
-                        ))) {
-                        width = xmlNodeListGetString(
-                            reply, cur->xmlChildrenNode, 1
-                        );
-                    } else if ((!xmlStrcmp(
-                                   cur->name,
-                                   (const xmlChar*)"Height"
-                               ))) {
-                        height = xmlNodeListGetString(
-                            reply, cur->xmlChildrenNode, 1
-                        );
+                    if ((!xmlStrcmp(cur->name, (const xmlChar*)"Width"))) {
+                        width = xmlNodeListGetString(reply, cur->xmlChildrenNode, 1);
+                    } else if ((!xmlStrcmp(cur->name, (const xmlChar*)"Height"))) {
+                        height = xmlNodeListGetString(reply, cur->xmlChildrenNode, 1);
                     }
                     cur = cur->next;
                 }
                 char tmp[128] = { 0 };
-                if ((strlen((char*)width) + strlen((char*)height)
-                    )
-                    > 124) {
-                    fprintf(
-                        stderr,
-                        "xmlNodeListString return buffer "
-                        "overflow %zu\n",
-                        strlen((char*)width) + strlen((char*)height)
-                    );
+                if ((strlen((char*)width) + strlen((char*)height)) > 124) {
+                    fprintf(stderr, "xmlNodeListString return buffer overflow %zu\n", strlen((char*)width) + strlen((char*)height));
                 } else {
                     sprintf(tmp, "%s x %s", width, height);
                 }
@@ -942,9 +659,7 @@ int getVideoEncoderConfigurationOptions(struct OnvifData* onvif_data)
                 int size = 0;
                 bool found_size = false;
                 while (!found_size) {
-                    if (strlen(onvif_data->resolutions_buf[size]
-                        )
-                        == 0) {
+                    if (strlen(onvif_data->resolutions_buf[size]) == 0) {
                         found_size = true;
                     } else {
                         size++;
@@ -954,17 +669,12 @@ int getVideoEncoderConfigurationOptions(struct OnvifData* onvif_data)
                 }
                 bool duplicate = false;
                 for (int n = 0; n < size; n++) {
-                    if (strcmp(
-                            onvif_data->resolutions_buf[n], tmp
-                        )
-                        == 0) {
+                    if (strcmp(onvif_data->resolutions_buf[n], tmp) == 0) {
                         duplicate = true;
                     }
                 }
                 if (!duplicate) {
-                    strcpy(
-                        onvif_data->resolutions_buf[size], tmp
-                    );
+                    strcpy(onvif_data->resolutions_buf[size], tmp);
                     k++;
                 }
 
@@ -977,36 +687,24 @@ int getVideoEncoderConfigurationOptions(struct OnvifData* onvif_data)
         }
 
         char temp_buf[128];
-        xpath = BAD_CAST
-            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-            "trt:Options//tt:H264//tt:GovLengthRange//tt:Min";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//trt:Options//tt:H264//tt:GovLengthRange//tt:Min";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->gov_length_min = atoi(temp_buf);
-        xpath = BAD_CAST
-            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-            "trt:Options//tt:H264//tt:GovLengthRange//tt:Max";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//trt:Options//tt:H264//tt:GovLengthRange//tt:Max";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->gov_length_max = atoi(temp_buf);
-        xpath = BAD_CAST
-            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-            "trt:Options//tt:H264//tt:FrameRateRange//tt:Min";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//trt:Options//tt:H264//tt:FrameRateRange//tt:Min";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->frame_rate_min = atoi(temp_buf);
-        xpath = BAD_CAST
-            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-            "trt:Options//tt:H264//tt:FrameRateRange//tt:Max";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//trt:Options//tt:H264//tt:FrameRateRange//tt:Max";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->frame_rate_max = atoi(temp_buf);
-        xpath = BAD_CAST
-            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-            "trt:Options//tt:Extension//tt:H264//tt:BitrateRange//tt:Min";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//trt:Options//tt:Extension//tt:H264//tt:BitrateRange//tt:Min";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->bitrate_min = atoi(temp_buf);
         else
             onvif_data->bitrate_min = 128;
-        xpath = BAD_CAST
-            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-            "trt:Options//tt:Extension//tt:H264//tt:BitrateRange//tt:Max";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//trt:Options//tt:Extension//tt:H264//tt:BitrateRange//tt:Max";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->bitrate_max = atoi(temp_buf);
         else
@@ -1014,158 +712,103 @@ int getVideoEncoderConfigurationOptions(struct OnvifData* onvif_data)
 
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
         if (result < 0)
-            strcat(
-                onvif_data->last_error,
-                " getVideoEncoderConfigurationOptions"
-            );
+            strcat(onvif_data->last_error, " getVideoEncoderConfigurationOptions");
         xmlFreeDoc(reply);
     } else {
         result = -1;
-        strcpy(
-            onvif_data->last_error,
-            "getVideoEncoderConfigurationOptions - No XML reply"
-        );
+        strcpy(onvif_data->last_error, "getVideoEncoderConfigurationOptions - No XML reply");
     }
     return result;
 }
 
 int getVideoEncoderConfiguration(struct OnvifData* onvif_data)
 {
-    memset(
-        onvif_data->video_encoder_name, 0,
-        sizeof(onvif_data->video_encoder_name)
-    );
+    memset(onvif_data->video_encoder_name, 0, sizeof(onvif_data->video_encoder_name));
     memset(onvif_data->encoding, 0, sizeof(onvif_data->encoding));
     memset(onvif_data->h264_profile, 0, sizeof(onvif_data->h264_profile));
-    memset(
-        onvif_data->multicast_address_type, 0,
-        sizeof(onvif_data->multicast_address_type)
-    );
-    memset(
-        onvif_data->multicast_address, 0, sizeof(onvif_data->multicast_address)
-    );
-    memset(
-        onvif_data->session_time_out, 0, sizeof(onvif_data->session_time_out)
-    );
+    memset(onvif_data->multicast_address_type, 0, sizeof(onvif_data->multicast_address_type));
+    memset(onvif_data->multicast_address, 0, sizeof(onvif_data->multicast_address));
+    memset(onvif_data->session_time_out, 0, sizeof(onvif_data->session_time_out));
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
 
     int result = 0;
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_trt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_trt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr getVideoEncoderConfiguration = xmlNewTextChild(
-        body, ns_trt, BAD_CAST "GetVideoEncoderConfiguration", NULL
-    );
-    xmlNewTextChild(
-        getVideoEncoderConfiguration, ns_trt, BAD_CAST "ConfigurationToken",
-        BAD_CAST onvif_data->videoEncoderConfigurationToken
-    );
+    xmlNodePtr getVideoEncoderConfiguration = xmlNewTextChild(body, ns_trt, BAD_CAST "GetVideoEncoderConfiguration", NULL);
+    xmlNewTextChild(getVideoEncoderConfiguration, ns_trt, BAD_CAST "ConfigurationToken", BAD_CAST onvif_data->videoEncoderConfigurationToken);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         xmlChar* xpath;
         char temp_buf[128] = { 0 };
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Name";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:Name";
         getXmlValue(reply, xpath, onvif_data->video_encoder_name, 128);
 
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:UseCount";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:UseCount";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->use_count = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:GuaranteedFrameRate";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:GuaranteedFrameRate";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0) {
             if (strcmp(temp_buf, "true") == 0)
                 onvif_data->guaranteed_frame_rate = true;
             else
                 onvif_data->guaranteed_frame_rate = false;
         }
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Encoding";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:Encoding";
         getXmlValue(reply, xpath, onvif_data->encoding, 128);
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Resolution//tt:Width";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:Resolution//tt:Width";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->width = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Resolution//tt:Height";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:Resolution//tt:Height";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->height = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Quality";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:Quality";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->quality = atof(temp_buf);
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:RateControl//tt:FrameRateLimit";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:RateControl//tt:FrameRateLimit";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->frame_rate = atoi(temp_buf);
-        xpath = BAD_CAST
-            "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-            "trt:Configuration//tt:RateControl//tt:EncodingInterval";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:RateControl//tt:EncodingInterval";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->encoding_interval = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:RateControl//tt:BitrateLimit";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:RateControl//tt:BitrateLimit";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->bitrate = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:H264//tt:H264Profile";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:H264//tt:H264Profile";
         getXmlValue(reply, xpath, onvif_data->h264_profile, 128);
 
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:H264//tt:GovLength";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:H264//tt:GovLength";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->gov_length = atoi(temp_buf);
 
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Multicast//tt:Address//tt:Type";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:Multicast//tt:Address//tt:Type";
         getXmlValue(reply, xpath, onvif_data->multicast_address_type, 128);
         if (strcmp(onvif_data->multicast_address_type, "IPv6") == 0)
-            xpath = BAD_CAST
-                "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                "trt:Configuration//tt:Multicast//tt:Address//"
-                "tt:IPv6Address";
+            xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:Multicast//tt:Address//tt:IPv6Address";
         else
-            xpath = BAD_CAST
-                "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                "trt:Configuration//tt:Multicast//tt:Address//"
-                "tt:IPv4Address";
+            xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:Multicast//tt:Address//tt:IPv4Address";
         getXmlValue(reply, xpath, onvif_data->multicast_address, 128);
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Multicast//tt:Port";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:Multicast//tt:Port";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->multicast_port = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Multicast//tt:TTL";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:Multicast//tt:TTL";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->multicast_ttl = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Multicast//tt:AutoStart";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:Multicast//tt:AutoStart";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0) {
             if (strcmp(temp_buf, "true") == 0)
                 onvif_data->autostart = true;
             else
                 onvif_data->autostart = false;
         }
-        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:SessionTimeout";
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//trt:Configuration//tt:SessionTimeout";
         getXmlValue(reply, xpath, onvif_data->session_time_out, 128);
 
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -1174,10 +817,7 @@ int getVideoEncoderConfiguration(struct OnvifData* onvif_data)
         xmlFreeDoc(reply);
     } else {
         result = -1;
-        strcpy(
-            onvif_data->last_error,
-            "getVideoEncoderConfiguration - No XML reply"
-        );
+        strcpy(onvif_data->last_error, "getVideoEncoderConfiguration - No XML reply");
     }
     return result;
 }
@@ -1223,104 +863,44 @@ int setVideoEncoderConfiguration(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_trt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_trt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr setVideoEncoderConfiguration = xmlNewTextChild(
-        body, ns_trt, BAD_CAST "SetVideoEncoderConfiguration", NULL
-    );
-    xmlNodePtr configuration = xmlNewTextChild(
-        setVideoEncoderConfiguration, ns_trt, BAD_CAST "Configuration", NULL
-    );
-    xmlNewProp(
-        configuration, BAD_CAST "token",
-        BAD_CAST onvif_data->videoEncoderConfigurationToken
-    );
-    xmlNewTextChild(
-        configuration, ns_tt, BAD_CAST "Name",
-        BAD_CAST onvif_data->video_encoder_name
-    );
-    xmlNewTextChild(
-        configuration, ns_tt, BAD_CAST "UseCount", BAD_CAST use_count_buf
-    );
+    xmlNodePtr setVideoEncoderConfiguration = xmlNewTextChild(body, ns_trt, BAD_CAST "SetVideoEncoderConfiguration", NULL);
+    xmlNodePtr configuration = xmlNewTextChild(setVideoEncoderConfiguration, ns_trt, BAD_CAST "Configuration", NULL);
+    xmlNewProp(configuration, BAD_CAST "token", BAD_CAST onvif_data->videoEncoderConfigurationToken);
+    xmlNewTextChild(configuration, ns_tt, BAD_CAST "Name", BAD_CAST onvif_data->video_encoder_name);
+    xmlNewTextChild(configuration, ns_tt, BAD_CAST "UseCount", BAD_CAST use_count_buf);
 #ifdef ONVIF19060
     /* Sad, but not supported until 19.06 release - crashes my older camera */
-    xmlNewTextChild(
-        configuration, ns_tt, BAD_CAST "GuaranteedFrameRate",
-        onvif_data->guaranteed_frame_rate ? BAD_CAST "true" : BAD_CAST "false"
-    );
+    xmlNewTextChild(configuration, ns_tt, BAD_CAST "GuaranteedFrameRate", onvif_data->guaranteed_frame_rate ? BAD_CAST "true" : BAD_CAST "false");
 #endif
-    xmlNewTextChild(
-        configuration, ns_tt, BAD_CAST "Encoding",
-        onvif_data->encoding[0] ? BAD_CAST onvif_data->encoding
-                                : BAD_CAST "H264"
-    );
+    xmlNewTextChild(configuration, ns_tt, BAD_CAST "Encoding", onvif_data->encoding[0] ? BAD_CAST onvif_data->encoding : BAD_CAST "H264");
     xmlNodePtr resolution = xmlNewTextChild(configuration, ns_tt, BAD_CAST "Resolution", NULL);
     xmlNewTextChild(resolution, ns_tt, BAD_CAST "Width", BAD_CAST width_buf);
     xmlNewTextChild(resolution, ns_tt, BAD_CAST "Height", BAD_CAST height_buf);
-    xmlNewTextChild(
-        configuration, ns_tt, BAD_CAST "Quality", BAD_CAST quality_buf
-    );
+    xmlNewTextChild(configuration, ns_tt, BAD_CAST "Quality", BAD_CAST quality_buf);
     xmlNodePtr rateControl = xmlNewTextChild(configuration, ns_tt, BAD_CAST "RateControl", NULL);
-    xmlNewTextChild(
-        rateControl, ns_tt, BAD_CAST "FrameRateLimit", BAD_CAST frame_rate_buf
-    );
-    xmlNewTextChild(
-        rateControl, ns_tt, BAD_CAST "EncodingInterval",
-        BAD_CAST encoding_interval_buf
-    );
-    xmlNewTextChild(
-        rateControl, ns_tt, BAD_CAST "BitrateLimit", BAD_CAST bitrate_buf
-    );
+    xmlNewTextChild(rateControl, ns_tt, BAD_CAST "FrameRateLimit", BAD_CAST frame_rate_buf);
+    xmlNewTextChild(rateControl, ns_tt, BAD_CAST "EncodingInterval", BAD_CAST encoding_interval_buf);
+    xmlNewTextChild(rateControl, ns_tt, BAD_CAST "BitrateLimit", BAD_CAST bitrate_buf);
     xmlNodePtr h264 = xmlNewTextChild(configuration, ns_tt, BAD_CAST "H264", NULL);
     xmlNewTextChild(h264, ns_tt, BAD_CAST "GovLength", BAD_CAST gov_length_buf);
-    xmlNewTextChild(
-        h264, ns_tt, BAD_CAST "H264Profile", BAD_CAST onvif_data->h264_profile
-    );
+    xmlNewTextChild(h264, ns_tt, BAD_CAST "H264Profile", BAD_CAST onvif_data->h264_profile);
     xmlNodePtr multicast = xmlNewTextChild(configuration, ns_tt, BAD_CAST "Multicast", NULL);
     xmlNodePtr address = xmlNewTextChild(multicast, ns_tt, BAD_CAST "Address", NULL);
-    xmlNewTextChild(
-        address, ns_tt, BAD_CAST "Type",
-        BAD_CAST onvif_data->multicast_address_type
-    );
-    xmlNewTextChild(
-        address, ns_tt, BAD_CAST "IPv4Address",
-        BAD_CAST onvif_data->multicast_address
-    );
-    xmlNewTextChild(
-        multicast, ns_tt, BAD_CAST "Port", BAD_CAST multicast_port_buf
-    );
-    xmlNewTextChild(
-        multicast, ns_tt, BAD_CAST "TTL", BAD_CAST multicast_ttl_buf
-    );
-    xmlNewTextChild(
-        multicast, ns_tt, BAD_CAST "AutoStart", BAD_CAST autostart_buf
-    );
-    xmlNewTextChild(
-        configuration, ns_tt, BAD_CAST "SessionTimeout",
-        BAD_CAST onvif_data->session_time_out
-    );
-    xmlNewTextChild(
-        setVideoEncoderConfiguration, ns_trt, BAD_CAST "ForcePersistence",
-        BAD_CAST "true"
-    );
+    xmlNewTextChild(address, ns_tt, BAD_CAST "Type", BAD_CAST onvif_data->multicast_address_type);
+    xmlNewTextChild(address, ns_tt, BAD_CAST "IPv4Address", BAD_CAST onvif_data->multicast_address);
+    xmlNewTextChild(multicast, ns_tt, BAD_CAST "Port", BAD_CAST multicast_port_buf);
+    xmlNewTextChild(multicast, ns_tt, BAD_CAST "TTL", BAD_CAST multicast_ttl_buf);
+    xmlNewTextChild(multicast, ns_tt, BAD_CAST "AutoStart", BAD_CAST autostart_buf);
+    xmlNewTextChild(configuration, ns_tt, BAD_CAST "SessionTimeout", BAD_CAST onvif_data->session_time_out);
+    xmlNewTextChild(setVideoEncoderConfiguration, ns_trt, BAD_CAST "ForcePersistence", BAD_CAST "true");
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -1329,10 +909,7 @@ int setVideoEncoderConfiguration(struct OnvifData* onvif_data)
         xmlFreeDoc(reply);
     } else {
         result = -1;
-        strcpy(
-            onvif_data->last_error,
-            "setVideoEncoderConfiguration - No XML reply"
-        );
+        strcpy(onvif_data->last_error, "setVideoEncoderConfiguration - No XML reply");
     }
     return result;
 }
@@ -1341,10 +918,7 @@ int getAudioEncoderConfigurationOptions(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     for (int i = 0; i < 3; i++) {
-        memset(
-            onvif_data->audio_encoders[i], 0,
-            sizeof(onvif_data->audio_encoders[i])
-        );
+        memset(onvif_data->audio_encoders[i], 0, sizeof(onvif_data->audio_encoders[i]));
         for (int j = 0; j < 8; j++) {
             onvif_data->audio_sample_rates[i][j] = 0;
             onvif_data->audio_bitrates[i][j] = 0;
@@ -1354,42 +928,21 @@ int getAudioEncoderConfigurationOptions(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_trt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_trt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr getAudioEncoderConfigurationOptions = xmlNewTextChild(
-        body, ns_trt, BAD_CAST "GetAudioEncoderConfigurationOptions", NULL
-    );
+    xmlNodePtr getAudioEncoderConfigurationOptions = xmlNewTextChild(body, ns_trt, BAD_CAST "GetAudioEncoderConfigurationOptions", NULL);
     if (onvif_data->audioEncoderConfigurationToken[0])
-        xmlNewTextChild(
-            getAudioEncoderConfigurationOptions, ns_trt,
-            BAD_CAST "ConfigurationToken",
-            BAD_CAST onvif_data->audioEncoderConfigurationToken
-        );
+        xmlNewTextChild(getAudioEncoderConfigurationOptions, ns_trt, BAD_CAST "ConfigurationToken", BAD_CAST onvif_data->audioEncoderConfigurationToken);
     if (onvif_data->profileToken[0])
-        xmlNewTextChild(
-            getAudioEncoderConfigurationOptions, ns_trt,
-            BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken
-        );
+        xmlNewTextChild(getAudioEncoderConfigurationOptions, ns_trt, BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
-        xmlChar* xpath = BAD_CAST
-            "//s:Body//trt:GetAudioEncoderConfigurationOptionsResponse//"
-            "trt:Options//tt:Encoding";
+        xmlChar* xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationOptionsResponse//trt:Options//tt:Encoding";
         xmlNodeSetPtr nodeset;
         xmlXPathObjectPtr xml_result = getNodeSet(reply, xpath);
         int k = 0;
@@ -1398,10 +951,7 @@ int getAudioEncoderConfigurationOptions(struct OnvifData* onvif_data)
             for (int i = 0; i < nodeset->nodeNr; i++) {
                 xmlNodePtr cur = nodeset->nodeTab[i]->children;
                 while (cur != NULL) {
-                    strcpy(
-                        onvif_data->audio_encoders[i],
-                        cur->content
-                    );
+                    strcpy(onvif_data->audio_encoders[i], cur->content);
                     cur = cur->next;
                 }
             }
@@ -1410,9 +960,7 @@ int getAudioEncoderConfigurationOptions(struct OnvifData* onvif_data)
 
         xmlChar* item = NULL;
 
-        xpath = BAD_CAST
-            "//s:Body//trt:GetAudioEncoderConfigurationOptionsResponse//"
-            "trt:Options//tt:BitrateList";
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationOptionsResponse//trt:Options//tt:BitrateList";
         xml_result = getNodeSet(reply, xpath);
         k = 0;
         if (xml_result) {
@@ -1421,9 +969,7 @@ int getAudioEncoderConfigurationOptions(struct OnvifData* onvif_data)
                 xmlNodePtr cur = nodeset->nodeTab[i]->children;
                 int j = 0;
                 while (cur != NULL) {
-                    item = xmlNodeListGetString(
-                        reply, cur->xmlChildrenNode, 1
-                    );
+                    item = xmlNodeListGetString(reply, cur->xmlChildrenNode, 1);
                     if (item) {
                         onvif_data->audio_bitrates[i][j] = atoi(item);
                         j++;
@@ -1434,9 +980,7 @@ int getAudioEncoderConfigurationOptions(struct OnvifData* onvif_data)
             xmlXPathFreeObject(xml_result);
         }
 
-        xpath = BAD_CAST
-            "//s:Body//trt:GetAudioEncoderConfigurationOptionsResponse//"
-            "trt:Options//tt:SampleRateList";
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationOptionsResponse//trt:Options//tt:SampleRateList";
         xml_result = getNodeSet(reply, xpath);
         k = 0;
         if (xml_result) {
@@ -1445,13 +989,9 @@ int getAudioEncoderConfigurationOptions(struct OnvifData* onvif_data)
                 xmlNodePtr cur = nodeset->nodeTab[i]->children;
                 int j = 0;
                 while (cur != NULL) {
-                    item = xmlNodeListGetString(
-                        reply, cur->xmlChildrenNode, 1
-                    );
+                    item = xmlNodeListGetString(reply, cur->xmlChildrenNode, 1);
                     if (item) {
-                        onvif_data
-                            ->audio_sample_rates[i][j]
-                            = atoi(item);
+                        onvif_data->audio_sample_rates[i][j] = atoi(item);
                         j++;
                     }
                     cur = cur->next;
@@ -1465,17 +1005,11 @@ int getAudioEncoderConfigurationOptions(struct OnvifData* onvif_data)
 
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
         if (result < 0)
-            strcat(
-                onvif_data->last_error,
-                " getAudioEncoderConfigurationOptions"
-            );
+            strcat(onvif_data->last_error, " getAudioEncoderConfigurationOptions");
         xmlFreeDoc(reply);
     } else {
         result = -1;
-        strcpy(
-            onvif_data->last_error,
-            "getAudioEncoderConfigurationOptions - No XML reply"
-        );
+        strcpy(onvif_data->last_error, "getAudioEncoderConfigurationOptions - No XML reply");
     }
     return result;
 }
@@ -1484,97 +1018,57 @@ int getAudioEncoderConfiguration(struct OnvifData* onvif_data)
 {
     memset(onvif_data->audio_name, 0, sizeof(onvif_data->audio_name));
     memset(onvif_data->audio_encoding, 0, sizeof(onvif_data->audio_encoding));
-    memset(
-        onvif_data->audio_session_timeout, 0,
-        sizeof(onvif_data->audio_session_timeout)
-    );
-    memset(
-        onvif_data->audio_multicast_type, 0,
-        sizeof(onvif_data->audio_multicast_type)
-    );
-    memset(
-        onvif_data->audio_multicast_address, 0,
-        sizeof(onvif_data->audio_multicast_address)
-    );
+    memset(onvif_data->audio_session_timeout, 0, sizeof(onvif_data->audio_session_timeout));
+    memset(onvif_data->audio_multicast_type, 0, sizeof(onvif_data->audio_multicast_type));
+    memset(onvif_data->audio_multicast_address, 0, sizeof(onvif_data->audio_multicast_address));
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
 
     int result = 0;
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_trt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_trt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr getAudioEncoderConfiguration = xmlNewTextChild(
-        body, ns_trt, BAD_CAST "GetAudioEncoderConfiguration", NULL
-    );
-    xmlNewTextChild(
-        getAudioEncoderConfiguration, ns_trt, BAD_CAST "ConfigurationToken",
-        BAD_CAST onvif_data->audioEncoderConfigurationToken
-    );
+    xmlNodePtr getAudioEncoderConfiguration = xmlNewTextChild(body, ns_trt, BAD_CAST "GetAudioEncoderConfiguration", NULL);
+    xmlNewTextChild(getAudioEncoderConfiguration, ns_trt, BAD_CAST "ConfigurationToken", BAD_CAST onvif_data->audioEncoderConfigurationToken);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         xmlChar* xpath;
         char temp_buf[128] = { 0 };
-        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Name";
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//trt:Configuration//tt:Name";
         getXmlValue(reply, xpath, onvif_data->audio_name, 128);
-        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:UseCount";
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//trt:Configuration//tt:UseCount";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->audio_use_count = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Encoding";
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//trt:Configuration//tt:Encoding";
         getXmlValue(reply, xpath, onvif_data->audio_encoding, 128);
-        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Bitrate";
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//trt:Configuration//tt:Bitrate";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->audio_bitrate = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:SampleRate";
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//trt:Configuration//tt:SampleRate";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->audio_sample_rate = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:SessionTimeout";
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//trt:Configuration//tt:SessionTimeout";
         getXmlValue(reply, xpath, onvif_data->audio_session_timeout, 128);
-        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Multicast//tt:Address//tt:Type";
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//trt:Configuration//tt:Multicast//tt:Address//tt:Type";
         getXmlValue(reply, xpath, onvif_data->audio_multicast_type, 128);
         if (strcmp(temp_buf, "IPv6") == 0)
-            xpath = BAD_CAST
-                "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                "trt:Configuration//tt:Multicast//tt:Address//"
-                "tt:IPv6Address";
+            xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//trt:Configuration//tt:Multicast//tt:Address//tt:IPv6Address";
         else
-            xpath = BAD_CAST
-                "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                "trt:Configuration//tt:Multicast//tt:Address//"
-                "tt:IPv4Address";
+            xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//trt:Configuration//tt:Multicast//tt:Address//tt:IPv4Address";
         getXmlValue(reply, xpath, onvif_data->audio_multicast_address, 128);
-        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Multicast//tt:Port";
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//trt:Configuration//tt:Multicast//tt:Port";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->audio_multicast_port = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Multicast//tt:TTL";
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//trt:Configuration//tt:Multicast//tt:TTL";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->audio_multicast_TTL = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Multicast//tt:AutoStart";
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//trt:Configuration//tt:Multicast//tt:AutoStart";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0) {
             if (strcmp(temp_buf, "true") == 0)
                 onvif_data->audio_multicast_auto_start = true;
@@ -1588,10 +1082,7 @@ int getAudioEncoderConfiguration(struct OnvifData* onvif_data)
         xmlFreeDoc(reply);
     } else {
         result = -1;
-        strcpy(
-            onvif_data->last_error,
-            "getAudioEncoderConfiguration - No XML reply"
-        );
+        strcpy(onvif_data->last_error, "getAudioEncoderConfiguration - No XML reply");
     }
     return result;
 }
@@ -1621,79 +1112,31 @@ int setAudioEncoderConfiguration(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_trt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_trt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr setAudioEncoderConfiguration = xmlNewTextChild(
-        body, ns_trt, BAD_CAST "SetAudioEncoderConfiguration", NULL
-    );
-    xmlNodePtr configuration = xmlNewTextChild(
-        setAudioEncoderConfiguration, ns_trt, BAD_CAST "Configuration", NULL
-    );
-    xmlNewProp(
-        configuration, BAD_CAST "token",
-        BAD_CAST onvif_data->audioEncoderConfigurationToken
-    );
-    xmlNewTextChild(
-        configuration, ns_tt, BAD_CAST "UseCount", BAD_CAST use_count_buf
-    );
-    xmlNewTextChild(
-        configuration, ns_tt, BAD_CAST "Name", BAD_CAST onvif_data->audio_name
-    );
-    xmlNewTextChild(
-        configuration, ns_tt, BAD_CAST "Encoding",
-        BAD_CAST onvif_data->audio_encoding
-    );
-    xmlNewTextChild(
-        configuration, ns_tt, BAD_CAST "Bitrate", BAD_CAST bitrate_buf
-    );
-    xmlNewTextChild(
-        configuration, ns_tt, BAD_CAST "SampleRate", BAD_CAST sample_rate_buf
-    );
+    xmlNodePtr setAudioEncoderConfiguration = xmlNewTextChild(body, ns_trt, BAD_CAST "SetAudioEncoderConfiguration", NULL);
+    xmlNodePtr configuration = xmlNewTextChild(setAudioEncoderConfiguration, ns_trt, BAD_CAST "Configuration", NULL);
+    xmlNewProp(configuration, BAD_CAST "token", BAD_CAST onvif_data->audioEncoderConfigurationToken);
+    xmlNewTextChild(configuration, ns_tt, BAD_CAST "UseCount", BAD_CAST use_count_buf);
+    xmlNewTextChild(configuration, ns_tt, BAD_CAST "Name", BAD_CAST onvif_data->audio_name);
+    xmlNewTextChild(configuration, ns_tt, BAD_CAST "Encoding", BAD_CAST onvif_data->audio_encoding);
+    xmlNewTextChild(configuration, ns_tt, BAD_CAST "Bitrate", BAD_CAST bitrate_buf);
+    xmlNewTextChild(configuration, ns_tt, BAD_CAST "SampleRate", BAD_CAST sample_rate_buf);
     xmlNodePtr multicast = xmlNewTextChild(configuration, ns_tt, BAD_CAST "Multicast", NULL);
     xmlNodePtr address = xmlNewTextChild(multicast, ns_tt, BAD_CAST "Address", NULL);
-    xmlNewTextChild(
-        address, ns_tt, BAD_CAST "Type",
-        BAD_CAST onvif_data->audio_multicast_type
-    );
-    xmlNewTextChild(
-        address, ns_tt, BAD_CAST "IPv4Address",
-        BAD_CAST onvif_data->audio_multicast_address
-    );
-    xmlNewTextChild(
-        multicast, ns_tt, BAD_CAST "Port", BAD_CAST multicast_port_buf
-    );
-    xmlNewTextChild(
-        multicast, ns_tt, BAD_CAST "TTL", BAD_CAST multicast_ttl_buf
-    );
-    xmlNewTextChild(
-        multicast, ns_tt, BAD_CAST "AutoStart", BAD_CAST autostart_buf
-    );
-    xmlNewTextChild(
-        configuration, ns_tt, BAD_CAST "SessionTimeout",
-        BAD_CAST onvif_data->audio_session_timeout
-    );
-    xmlNewTextChild(
-        setAudioEncoderConfiguration, ns_trt, BAD_CAST "ForcePersistence",
-        BAD_CAST "true"
-    );
+    xmlNewTextChild(address, ns_tt, BAD_CAST "Type", BAD_CAST onvif_data->audio_multicast_type);
+    xmlNewTextChild(address, ns_tt, BAD_CAST "IPv4Address", BAD_CAST onvif_data->audio_multicast_address);
+    xmlNewTextChild(multicast, ns_tt, BAD_CAST "Port", BAD_CAST multicast_port_buf);
+    xmlNewTextChild(multicast, ns_tt, BAD_CAST "TTL", BAD_CAST multicast_ttl_buf);
+    xmlNewTextChild(multicast, ns_tt, BAD_CAST "AutoStart", BAD_CAST autostart_buf);
+    xmlNewTextChild(configuration, ns_tt, BAD_CAST "SessionTimeout", BAD_CAST onvif_data->audio_session_timeout);
+    xmlNewTextChild(setAudioEncoderConfiguration, ns_trt, BAD_CAST "ForcePersistence", BAD_CAST "true");
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -1702,89 +1145,47 @@ int setAudioEncoderConfiguration(struct OnvifData* onvif_data)
         xmlFreeDoc(reply);
     } else {
         result = -1;
-        strcpy(
-            onvif_data->last_error,
-            "setAudioEncoderConfiguration - No XML reply"
-        );
+        strcpy(onvif_data->last_error, "setAudioEncoderConfiguration - No XML reply");
     }
     return result;
 }
 
 int getProfile(struct OnvifData* onvif_data)
 {
-    memset(
-        onvif_data->videoEncoderConfigurationToken, 0,
-        sizeof(onvif_data->videoEncoderConfigurationToken)
-    );
-    memset(
-        onvif_data->videoSourceConfigurationToken, 0,
-        sizeof(onvif_data->videoSourceConfigurationToken)
-    );
-    memset(
-        onvif_data->audioEncoderConfigurationToken, 0,
-        sizeof(onvif_data->audioEncoderConfigurationToken)
-    );
-    memset(
-        onvif_data->audioSourceConfigurationToken, 0,
-        sizeof(onvif_data->audioSourceConfigurationToken)
-    );
+    memset(onvif_data->videoEncoderConfigurationToken, 0, sizeof(onvif_data->videoEncoderConfigurationToken));
+    memset(onvif_data->videoSourceConfigurationToken, 0, sizeof(onvif_data->videoSourceConfigurationToken));
+    memset(onvif_data->audioEncoderConfigurationToken, 0, sizeof(onvif_data->audioEncoderConfigurationToken));
+    memset(onvif_data->audioSourceConfigurationToken, 0, sizeof(onvif_data->audioSourceConfigurationToken));
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
 
     int result = 0;
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_trt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_trt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr getProfile = xmlNewTextChild(body, ns_trt, BAD_CAST "GetProfile", NULL);
-    xmlNewTextChild(
-        getProfile, ns_trt, BAD_CAST "ProfileToken",
-        BAD_CAST onvif_data->profileToken
-    );
+    xmlNewTextChild(getProfile, ns_trt, BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         char temp_buf[128];
 
         xmlChar* xpath;
 
-        xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//"
-                         "tt:AudioEncoderConfiguration";
-        getNodeAttribute(
-            reply, xpath, BAD_CAST "token",
-            onvif_data->audioEncoderConfigurationToken, 128
-        );
-        xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//"
-                         "tt:AudioSourceConfiguration//tt:SourceToken";
-        getXmlValue(
-            reply, xpath, onvif_data->audioSourceConfigurationToken, 128
-        );
+        xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//tt:AudioEncoderConfiguration";
+        getNodeAttribute(reply, xpath, BAD_CAST "token", onvif_data->audioEncoderConfigurationToken, 128);
+        xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//tt:AudioSourceConfiguration//tt:SourceToken";
+        getXmlValue(reply, xpath, onvif_data->audioSourceConfigurationToken, 128);
 
-        xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//"
-                         "tt:VideoEncoderConfiguration";
-        getNodeAttribute(
-            reply, xpath, BAD_CAST "token",
-            onvif_data->videoEncoderConfigurationToken, 128
-        );
-        xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//"
-                         "tt:VideoSourceConfiguration//tt:SourceToken";
-        getXmlValue(
-            reply, xpath, onvif_data->videoSourceConfigurationToken, 128
-        );
+        xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//tt:VideoEncoderConfiguration";
+        getNodeAttribute(reply, xpath, BAD_CAST "token", onvif_data->videoEncoderConfigurationToken, 128);
+        xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//tt:VideoSourceConfiguration//tt:SourceToken";
+        getXmlValue(reply, xpath, onvif_data->videoSourceConfigurationToken, 128);
 
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
         if (result < 0)
@@ -1804,64 +1205,42 @@ int getOptions(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_timg = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver20/imaging/wsdl",
-        BAD_CAST "timg"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_timg = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver20/imaging/wsdl", BAD_CAST "timg");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr getOptions = xmlNewTextChild(body, ns_timg, BAD_CAST "GetOptions", NULL);
-    xmlNewTextChild(
-        getOptions, ns_timg, BAD_CAST "VideoSourceToken",
-        BAD_CAST onvif_data->videoSourceConfigurationToken
-    );
+    xmlNewTextChild(getOptions, ns_timg, BAD_CAST "VideoSourceToken", BAD_CAST onvif_data->videoSourceConfigurationToken);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->imaging_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->imaging_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         xmlChar* xpath;
         char temp_buf[128] = { 0 };
 
-        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                         "timg:ImagingOptions//tt:Brightness//tt:Min";
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//timg:ImagingOptions//tt:Brightness//tt:Min";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->brightness_min = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                         "timg:ImagingOptions//tt:Brightness//tt:Max";
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//timg:ImagingOptions//tt:Brightness//tt:Max";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->brightness_max = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                         "timg:ImagingOptions//tt:ColorSaturation//tt:Min";
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//timg:ImagingOptions//tt:ColorSaturation//tt:Min";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->saturation_min = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                         "timg:ImagingOptions//tt:ColorSaturation//tt:Max";
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//timg:ImagingOptions//tt:ColorSaturation//tt:Max";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->saturation_max = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                         "timg:ImagingOptions//tt:Contrast//tt:Min";
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//timg:ImagingOptions//tt:Contrast//tt:Min";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->contrast_min = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                         "timg:ImagingOptions//tt:Contrast//tt:Max";
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//timg:ImagingOptions//tt:Contrast//tt:Max";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->contrast_max = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                         "timg:ImagingOptions//tt:Sharpness//tt:Min";
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//timg:ImagingOptions//tt:Sharpness//tt:Min";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->sharpness_min = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                         "timg:ImagingOptions//tt:Sharpness//tt:Max";
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//timg:ImagingOptions//tt:Sharpness//tt:Max";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->sharpness_max = atoi(temp_buf);
 
@@ -1883,48 +1262,30 @@ int getImagingSettings(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_timg = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver20/imaging/wsdl",
-        BAD_CAST "timg"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_timg = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver20/imaging/wsdl", BAD_CAST "timg");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr getImagingSettings = xmlNewTextChild(body, ns_timg, BAD_CAST "GetImagingSettings", NULL);
-    xmlNewTextChild(
-        getImagingSettings, ns_timg, BAD_CAST "VideoSourceToken",
-        BAD_CAST onvif_data->videoSourceConfigurationToken
-    );
+    xmlNewTextChild(getImagingSettings, ns_timg, BAD_CAST "VideoSourceToken", BAD_CAST onvif_data->videoSourceConfigurationToken);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->imaging_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->imaging_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         xmlChar* xpath;
         char temp_buf[128] = { 0 };
 
-        xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//"
-                         "timg:ImagingSettings//tt:Brightness";
+        xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//timg:ImagingSettings//tt:Brightness";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->brightness = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//"
-                         "timg:ImagingSettings//tt:ColorSaturation";
+        xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//timg:ImagingSettings//tt:ColorSaturation";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->saturation = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//"
-                         "timg:ImagingSettings//tt:Contrast";
+        xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//timg:ImagingSettings//tt:Contrast";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->contrast = atoi(temp_buf);
-        xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//"
-                         "timg:ImagingSettings//tt:Sharpness";
+        xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//timg:ImagingSettings//tt:Sharpness";
         if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
             onvif_data->sharpness = atoi(temp_buf);
 
@@ -1956,48 +1317,21 @@ int setImagingSettings(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_timg = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver20/imaging/wsdl",
-        BAD_CAST "timg"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_timg = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver20/imaging/wsdl", BAD_CAST "timg");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr setImagingSettings = xmlNewTextChild(body, ns_timg, BAD_CAST "SetImagingSettings", NULL);
-    xmlNewTextChild(
-        setImagingSettings, ns_timg, BAD_CAST "VideoSourceToken",
-        BAD_CAST onvif_data->videoSourceConfigurationToken
-    );
-    xmlNodePtr imagingSettings = xmlNewTextChild(
-        setImagingSettings, ns_timg, BAD_CAST "ImagingSettings", NULL
-    );
-    xmlNewTextChild(
-        imagingSettings, ns_tt, BAD_CAST "Brightness", BAD_CAST brightness_buf
-    );
-    xmlNewTextChild(
-        imagingSettings, ns_tt, BAD_CAST "ColorSaturation",
-        BAD_CAST saturation_buf
-    );
-    xmlNewTextChild(
-        imagingSettings, ns_tt, BAD_CAST "Contrast", BAD_CAST contrast_buf
-    );
-    xmlNewTextChild(
-        imagingSettings, ns_tt, BAD_CAST "Sharpness", BAD_CAST sharpness_buf
-    );
+    xmlNewTextChild(setImagingSettings, ns_timg, BAD_CAST "VideoSourceToken", BAD_CAST onvif_data->videoSourceConfigurationToken);
+    xmlNodePtr imagingSettings = xmlNewTextChild(setImagingSettings, ns_timg, BAD_CAST "ImagingSettings", NULL);
+    xmlNewTextChild(imagingSettings, ns_tt, BAD_CAST "Brightness", BAD_CAST brightness_buf);
+    xmlNewTextChild(imagingSettings, ns_tt, BAD_CAST "ColorSaturation", BAD_CAST saturation_buf);
+    xmlNewTextChild(imagingSettings, ns_tt, BAD_CAST "Contrast", BAD_CAST contrast_buf);
+    xmlNewTextChild(imagingSettings, ns_tt, BAD_CAST "Sharpness", BAD_CAST sharpness_buf);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->imaging_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->imaging_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -2007,6 +1341,119 @@ int setImagingSettings(struct OnvifData* onvif_data)
     } else {
         result = -1;
         strcpy(onvif_data->last_error, "setImagingSettings - No XML reply");
+    }
+    return result;
+}
+
+int getStatus(struct OnvifData* onvif_data)
+{
+    memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
+    int result = 0;
+    xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
+    xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
+    xmlDocSetRootElement(doc, root);
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_ptz = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver20/ptz/wsdl", BAD_CAST "tptz");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
+    xmlSetNs(root, ns_env);
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
+    xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
+    xmlNodePtr getStatus = xmlNewTextChild(body, ns_ptz, BAD_CAST "GetStatus", NULL);
+    xmlNewTextChild(getStatus, ns_ptz, BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken);
+    char cmd[4096] = { 0 };
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, sizeof(cmd));
+    xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
+    if (reply != NULL) {
+        xmlXPathContextPtr xpathCtx = xmlXPathNewContext(reply);
+        xmlXPathRegisterNs(xpathCtx, BAD_CAST "s", BAD_CAST "http://www.w3.org/2003/05/soap-envelope");
+        xmlXPathRegisterNs(xpathCtx, BAD_CAST "tptz", BAD_CAST "http://www.onvif.org/ver20/ptz/wsdl");
+        xmlXPathRegisterNs(xpathCtx, BAD_CAST "tt", BAD_CAST "http://www.onvif.org/ver10/schema");
+
+        xmlXPathObjectPtr resultObj = xmlXPathEvalExpression(
+            BAD_CAST "//s:Body//tptz:GetStatusResponse//tptz:PTZStatus//tt:Position//tt:PanTilt",
+            xpathCtx
+        );
+
+        if (resultObj && resultObj->nodesetval && resultObj->nodesetval->nodeNr > 0) {
+            xmlNodePtr node = resultObj->nodesetval->nodeTab[0];
+            xmlChar* xVal = xmlGetProp(node, BAD_CAST "x");
+            xmlChar* yVal = xmlGetProp(node, BAD_CAST "y");
+
+            if (xVal && yVal) {
+                onvif_data->position[0] = atof((char*)xVal);
+                onvif_data->position[1] = atof((char*)yVal);
+            } else {
+                strcpy(onvif_data->last_error, "getStatus - Missing PanTilt values");
+                result = -1;
+            }
+
+            if (xVal)
+                xmlFree(xVal);
+            if (yVal)
+                xmlFree(yVal);
+        } else {
+            strcpy(onvif_data->last_error, "getStatus - PTZStatus PanTilt not found");
+            result = -1;
+        }
+
+        if (resultObj)
+            xmlXPathFreeObject(resultObj);
+        xmlXPathFreeContext(xpathCtx);
+
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getStatus");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "getStatus - No XML reply");
+    }
+
+    return result;
+}
+
+int absoluteMove(float x_position, float y_position, struct OnvifData* onvif_data)
+{
+    memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
+    int result = 0;
+
+    char pan_tilt_string[128] = { 0 };
+    sprintf(pan_tilt_string, "PanTilt x=\"%.2f\" y=\"%.2f\"", x_position, y_position);
+
+    xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
+    xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
+    xmlDocSetRootElement(doc, root);
+
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_ptz = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver20/ptz/wsdl", BAD_CAST "ptz");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
+    xmlSetNs(root, ns_env);
+
+    // Add WS-Security Header
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
+
+    // Body
+    xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
+    xmlNodePtr absoluteMove = xmlNewTextChild(body, ns_ptz, BAD_CAST "AbsoluteMove", NULL);
+
+    // ProfileToken
+    xmlNewTextChild(absoluteMove, ns_ptz, BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken);
+
+    // Position
+    xmlNodePtr position_node = xmlNewChild(absoluteMove, ns_ptz, BAD_CAST "Position", NULL);
+    xmlNewTextChild(position_node, ns_tt, BAD_CAST pan_tilt_string, NULL);
+
+    char cmd[4096] = { 0 };
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, 4096);
+    xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " absoluteMove");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "absoluteMove - No XML reply");
     }
     return result;
 }
@@ -2023,36 +1470,19 @@ int continuousMove(float x, float y, float z, struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_ptz = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver20/ptz/wsdl", BAD_CAST "ptz"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_ptz = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver20/ptz/wsdl", BAD_CAST "ptz");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr continuousMove = xmlNewTextChild(body, ns_ptz, BAD_CAST "ContinuousMove", NULL);
-    xmlNewTextChild(
-        continuousMove, ns_ptz, BAD_CAST "ProfileToken",
-        BAD_CAST onvif_data->profileToken
-    );
-    xmlNodePtr velocity = xmlNewTextChild(
-        continuousMove, ns_ptz, BAD_CAST "Velocity", BAD_CAST NULL
-    );
+    xmlNewTextChild(continuousMove, ns_ptz, BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken);
+    xmlNodePtr velocity = xmlNewTextChild(continuousMove, ns_ptz, BAD_CAST "Velocity", BAD_CAST NULL);
     xmlNewTextChild(velocity, ns_tt, BAD_CAST pan_tilt_string, NULL);
     xmlNewTextChild(velocity, ns_tt, BAD_CAST zoom_string, NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -2084,29 +1514,17 @@ int moveStop(int type, struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_ptz = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver20/ptz/wsdl", BAD_CAST "ptz"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_ptz = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver20/ptz/wsdl", BAD_CAST "ptz");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr stop = xmlNewTextChild(body, ns_ptz, BAD_CAST "Stop", NULL);
-    xmlNewTextChild(
-        stop, ns_ptz, BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken
-    );
+    xmlNewTextChild(stop, ns_ptz, BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken);
     xmlNewTextChild(stop, ns_ptz, BAD_CAST "PanTilt", BAD_CAST pan_tilt_flag);
     xmlNewTextChild(stop, ns_ptz, BAD_CAST "Zoom", BAD_CAST zoom_flag);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -2127,29 +1545,16 @@ int setPreset(char* arg, struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_ptz = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver20/ptz/wsdl", BAD_CAST "ptz"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_ptz = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver20/ptz/wsdl", BAD_CAST "ptz");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr setPreset = xmlNewTextChild(body, ns_ptz, BAD_CAST "SetPreset", NULL);
-    xmlNewTextChild(
-        setPreset, ns_ptz, BAD_CAST "ProfileToken",
-        BAD_CAST onvif_data->profileToken
-    );
+    xmlNewTextChild(setPreset, ns_ptz, BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken);
     xmlNewTextChild(setPreset, ns_ptz, BAD_CAST "PresetToken", BAD_CAST arg);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -2170,29 +1575,16 @@ int gotoPreset(char* arg, struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_ptz = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver20/ptz/wsdl", BAD_CAST "ptz"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_ptz = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver20/ptz/wsdl", BAD_CAST "ptz");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr gotoPreset = xmlNewTextChild(body, ns_ptz, BAD_CAST "GotoPreset", NULL);
-    xmlNewTextChild(
-        gotoPreset, ns_ptz, BAD_CAST "ProfileToken",
-        BAD_CAST onvif_data->profileToken
-    );
+    xmlNewTextChild(gotoPreset, ns_ptz, BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken);
     xmlNewTextChild(gotoPreset, ns_ptz, BAD_CAST "PresetToken", BAD_CAST arg);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -2213,33 +1605,19 @@ int setUser(char* new_password, struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr setUser = xmlNewTextChild(body, ns_tds, BAD_CAST "SetUser", NULL);
     xmlNodePtr user = xmlNewTextChild(setUser, ns_tds, BAD_CAST "User", NULL);
     xmlNewTextChild(user, ns_tt, BAD_CAST "Username", BAD_CAST "admin");
     xmlNewTextChild(user, ns_tt, BAD_CAST "Password", BAD_CAST new_password);
-    xmlNewTextChild(
-        user, ns_tt, BAD_CAST "UserLevel", BAD_CAST "Administrator"
-    );
+    xmlNewTextChild(user, ns_tt, BAD_CAST "UserLevel", BAD_CAST "Administrator");
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -2322,40 +1700,18 @@ int setSystemDateAndTime(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr setSystemDateAndTime = xmlNewTextChild(body, ns_tds, BAD_CAST "SetSystemDateAndTime", NULL);
-    xmlNewTextChild(
-        setSystemDateAndTime, ns_tds, BAD_CAST "DateTimeType",
-        BAD_CAST datetimetype
-    );
-    xmlNewTextChild(
-        setSystemDateAndTime, ns_tds, BAD_CAST "DaylightSavings",
-        BAD_CAST dst_flag_buf
-    );
-    xmlNodePtr timeZone = xmlNewTextChild(
-        setSystemDateAndTime, ns_tds, BAD_CAST "TimeZone", NULL
-    );
-    xmlNewTextChild(
-        timeZone, ns_tt, BAD_CAST "TZ", BAD_CAST onvif_data->timezone
-    );
-    xmlNodePtr utcDateTime = xmlNewTextChild(
-        setSystemDateAndTime, ns_tds, BAD_CAST "UTCDateTime", NULL
-    );
+    xmlNewTextChild(setSystemDateAndTime, ns_tds, BAD_CAST "DateTimeType", BAD_CAST datetimetype);
+    xmlNewTextChild(setSystemDateAndTime, ns_tds, BAD_CAST "DaylightSavings", BAD_CAST dst_flag_buf);
+    xmlNodePtr timeZone = xmlNewTextChild(setSystemDateAndTime, ns_tds, BAD_CAST "TimeZone", NULL);
+    xmlNewTextChild(timeZone, ns_tt, BAD_CAST "TZ", BAD_CAST onvif_data->timezone);
+    xmlNodePtr utcDateTime = xmlNewTextChild(setSystemDateAndTime, ns_tds, BAD_CAST "UTCDateTime", NULL);
     xmlNodePtr cameraTime = xmlNewTextChild(utcDateTime, ns_tt, BAD_CAST "Time", NULL);
     xmlNewTextChild(cameraTime, ns_tt, BAD_CAST "Hour", BAD_CAST hour_buf);
     xmlNewTextChild(cameraTime, ns_tt, BAD_CAST "Minute", BAD_CAST minute_buf);
@@ -2365,9 +1721,7 @@ int setSystemDateAndTime(struct OnvifData* onvif_data)
     xmlNewTextChild(cameraDate, ns_tt, BAD_CAST "Month", BAD_CAST month_buf);
     xmlNewTextChild(cameraDate, ns_tt, BAD_CAST "Day", BAD_CAST day_buf);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -2376,9 +1730,7 @@ int setSystemDateAndTime(struct OnvifData* onvif_data)
         xmlFreeDoc(reply);
     } else {
         result = -1;
-        strcpy(
-            onvif_data->last_error, "setSystemDateAndTime - No XML reply"
-        );
+        strcpy(onvif_data->last_error, "setSystemDateAndTime - No XML reply");
     }
     return result;
 }
@@ -2405,28 +1757,16 @@ int setSystemDateAndTimeUsingTimezone(struct OnvifData* onvif_data)
             int h = -(UTCTime->tm_gmtoff / 3600);
             int m = (UTCTime->tm_gmtoff + 3600 * h) / 60;
             if (m)
-                sprintf(
-                    onvif_data->timezone, "%s%d:%02d:00%s", tzname[0],
-                    h, m, tzname[1]
-                );
+                sprintf(onvif_data->timezone, "%s%d:%02d:00%s", tzname[0], h, m, tzname[1]);
             else
-                sprintf(
-                    onvif_data->timezone, "%s%d%s", tzname[0], h,
-                    tzname[1]
-                );
+                sprintf(onvif_data->timezone, "%s%d%s", tzname[0], h, tzname[1]);
 #else
             int h = _timezone / 3600;
             int m = (_timezone - 3600 * h) / 60;
             if (m)
-                sprintf(
-                    onvif_data->timezone, "%s%d:%02d:00%s", _tzname[0],
-                    h, m, _tzname[1]
-                );
+                sprintf(onvif_data->timezone, "%s%d:%02d:00%s", _tzname[0], h, m, _tzname[1]);
             else
-                sprintf(
-                    onvif_data->timezone, "%s%d%s", _tzname[0], h,
-                    _tzname[1]
-                );
+                sprintf(onvif_data->timezone, "%s%d%s", _tzname[0], h, _tzname[1]);
 #endif
         }
         UTCTime = gmtime(&rawtime);
@@ -2449,39 +1789,18 @@ int setSystemDateAndTimeUsingTimezone(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr setSystemDateAndTime = xmlNewTextChild(body, ns_tds, BAD_CAST "SetSystemDateAndTime", NULL);
-    xmlNewTextChild(
-        setSystemDateAndTime, ns_tds, BAD_CAST "DateTimeType", BAD_CAST "Manual"
-    );
-    xmlNewTextChild(
-        setSystemDateAndTime, ns_tds, BAD_CAST "DaylightSavings",
-        BAD_CAST dst_flag_buf
-    );
-    xmlNodePtr timeZone = xmlNewTextChild(
-        setSystemDateAndTime, ns_tds, BAD_CAST "TimeZone", NULL
-    );
-    xmlNewTextChild(
-        timeZone, ns_tt, BAD_CAST "TZ", BAD_CAST onvif_data->timezone
-    );
-    xmlNodePtr utcDateTime = xmlNewTextChild(
-        setSystemDateAndTime, ns_tds, BAD_CAST "UTCDateTime", NULL
-    );
+    xmlNewTextChild(setSystemDateAndTime, ns_tds, BAD_CAST "DateTimeType", BAD_CAST "Manual");
+    xmlNewTextChild(setSystemDateAndTime, ns_tds, BAD_CAST "DaylightSavings", BAD_CAST dst_flag_buf);
+    xmlNodePtr timeZone = xmlNewTextChild(setSystemDateAndTime, ns_tds, BAD_CAST "TimeZone", NULL);
+    xmlNewTextChild(timeZone, ns_tt, BAD_CAST "TZ", BAD_CAST onvif_data->timezone);
+    xmlNodePtr utcDateTime = xmlNewTextChild(setSystemDateAndTime, ns_tds, BAD_CAST "UTCDateTime", NULL);
     xmlNodePtr cameraTime = xmlNewTextChild(utcDateTime, ns_tt, BAD_CAST "Time", NULL);
     xmlNewTextChild(cameraTime, ns_tt, BAD_CAST "Hour", BAD_CAST hour_buf);
     xmlNewTextChild(cameraTime, ns_tt, BAD_CAST "Minute", BAD_CAST minute_buf);
@@ -2491,9 +1810,7 @@ int setSystemDateAndTimeUsingTimezone(struct OnvifData* onvif_data)
     xmlNewTextChild(cameraDate, ns_tt, BAD_CAST "Month", BAD_CAST month_buf);
     xmlNewTextChild(cameraDate, ns_tt, BAD_CAST "Day", BAD_CAST day_buf);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -2503,8 +1820,7 @@ int setSystemDateAndTimeUsingTimezone(struct OnvifData* onvif_data)
             time_t newtime;
             time(&newtime);
             if (newtime != rawtime) {
-                // save a little effort if we are within a second of
-                // the previous check
+                // save a little effort if we are within a second of the previous check
                 if (special)
                     UTCTime = localtime(&newtime);
                 else
@@ -2519,101 +1835,41 @@ int setSystemDateAndTimeUsingTimezone(struct OnvifData* onvif_data)
             doc = xmlNewDoc(BAD_CAST "1.0");
             xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
             xmlDocSetRootElement(doc, root);
-            xmlNsPtr ns_env = xmlNewNs(
-                root,
-                BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-                BAD_CAST "SOAP-ENV"
-            );
-            xmlNsPtr ns_tds = xmlNewNs(
-                root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl",
-                BAD_CAST "tds"
-            );
-            xmlNsPtr ns_tt = xmlNewNs(
-                root, BAD_CAST "http://www.onvif.org/ver10/schema",
-                BAD_CAST "tt"
-            );
+            xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+            xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
+            xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
             xmlSetNs(root, ns_env);
-            addUsernameDigestHeader(
-                root, ns_env, onvif_data->username,
-                onvif_data->password, onvif_data->time_offset
-            );
+            addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
             xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-            xmlNodePtr setSystemDateAndTime = xmlNewTextChild(
-                body, ns_tds, BAD_CAST "SetSystemDateAndTime", NULL
-            );
-            xmlNewTextChild(
-                setSystemDateAndTime, ns_tds, BAD_CAST "DateTimeType",
-                BAD_CAST "NTP"
-            );
-            xmlNewTextChild(
-                setSystemDateAndTime, ns_tds,
-                BAD_CAST "DaylightSavings", BAD_CAST dst_flag_buf
-            );
-            xmlNodePtr timeZone = xmlNewTextChild(
-                setSystemDateAndTime, ns_tds, BAD_CAST "TimeZone", NULL
-            );
-            xmlNewTextChild(
-                timeZone, ns_tt, BAD_CAST "TZ",
-                BAD_CAST onvif_data->timezone
-            );
-            // Need to include date/time even though the specs say it
-            // should be ignored
-            xmlNodePtr utcDateTime = xmlNewTextChild(
-                setSystemDateAndTime, ns_tds, BAD_CAST "UTCDateTime",
-                NULL
-            );
-            xmlNodePtr cameraTime = xmlNewTextChild(
-                utcDateTime, ns_tt, BAD_CAST "Time", NULL
-            );
-            xmlNewTextChild(
-                cameraTime, ns_tt, BAD_CAST "Hour", BAD_CAST hour_buf
-            );
-            xmlNewTextChild(
-                cameraTime, ns_tt, BAD_CAST "Minute",
-                BAD_CAST minute_buf
-            );
-            xmlNewTextChild(
-                cameraTime, ns_tt, BAD_CAST "Second",
-                BAD_CAST second_buf
-            );
-            xmlNodePtr cameraDate = xmlNewTextChild(
-                utcDateTime, ns_tt, BAD_CAST "Date", NULL
-            );
-            xmlNewTextChild(
-                cameraDate, ns_tt, BAD_CAST "Year", BAD_CAST year_buf
-            );
-            xmlNewTextChild(
-                cameraDate, ns_tt, BAD_CAST "Month", BAD_CAST month_buf
-            );
-            xmlNewTextChild(
-                cameraDate, ns_tt, BAD_CAST "Day", BAD_CAST day_buf
-            );
+            xmlNodePtr setSystemDateAndTime = xmlNewTextChild(body, ns_tds, BAD_CAST "SetSystemDateAndTime", NULL);
+            xmlNewTextChild(setSystemDateAndTime, ns_tds, BAD_CAST "DateTimeType", BAD_CAST "NTP");
+            xmlNewTextChild(setSystemDateAndTime, ns_tds, BAD_CAST "DaylightSavings", BAD_CAST dst_flag_buf);
+            xmlNodePtr timeZone = xmlNewTextChild(setSystemDateAndTime, ns_tds, BAD_CAST "TimeZone", NULL);
+            xmlNewTextChild(timeZone, ns_tt, BAD_CAST "TZ", BAD_CAST onvif_data->timezone);
+            // Need to include date/time even though the specs say it should be ignored
+            xmlNodePtr utcDateTime = xmlNewTextChild(setSystemDateAndTime, ns_tds, BAD_CAST "UTCDateTime", NULL);
+            xmlNodePtr cameraTime = xmlNewTextChild(utcDateTime, ns_tt, BAD_CAST "Time", NULL);
+            xmlNewTextChild(cameraTime, ns_tt, BAD_CAST "Hour", BAD_CAST hour_buf);
+            xmlNewTextChild(cameraTime, ns_tt, BAD_CAST "Minute", BAD_CAST minute_buf);
+            xmlNewTextChild(cameraTime, ns_tt, BAD_CAST "Second", BAD_CAST second_buf);
+            xmlNodePtr cameraDate = xmlNewTextChild(utcDateTime, ns_tt, BAD_CAST "Date", NULL);
+            xmlNewTextChild(cameraDate, ns_tt, BAD_CAST "Year", BAD_CAST year_buf);
+            xmlNewTextChild(cameraDate, ns_tt, BAD_CAST "Month", BAD_CAST month_buf);
+            xmlNewTextChild(cameraDate, ns_tt, BAD_CAST "Day", BAD_CAST day_buf);
             char cmd[4096] = { 0 };
-            addHttpHeader(
-                doc, root, onvif_data->xaddrs,
-                onvif_data->device_service, cmd, 4096
-            );
+            addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
             xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
             if (reply != NULL) {
-                result = checkForXmlErrorMsg(
-                    reply, onvif_data->last_error
-                );
+                result = checkForXmlErrorMsg(reply, onvif_data->last_error);
                 xmlFreeDoc(reply);
             } else {
                 result = -1;
-                strcpy(
-                    onvif_data->last_error,
-                    "setSystemDateAndTimeUsingTimezone - No XML "
-                    "reply"
-                );
+                strcpy(onvif_data->last_error, "setSystemDateAndTimeUsingTimezone - No XML reply");
             }
         }
     } else {
         result = -1;
-        strcpy(
-            onvif_data->last_error,
-            "setSystemDateAndTimeUsingTimezone 2 - No XML reply"
-        );
+        strcpy(onvif_data->last_error, "setSystemDateAndTimeUsingTimezone 2 - No XML reply");
     }
     return result;
 }
@@ -2628,31 +1884,17 @@ int getProfileToken(struct OnvifData* onvif_data, int profileIndex)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_trt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_trt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_trt, BAD_CAST "GetProfiles", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
-        getNodeAttributen(
-            reply,
-            BAD_CAST "//s:Body//trt:GetProfilesResponse//trt:Profiles",
-            BAD_CAST "token", onvif_data->profileToken, 128, profileIndex
-        );
+        getNodeAttributen(reply, BAD_CAST "//s:Body//trt:GetProfilesResponse//trt:Profiles", BAD_CAST "token", onvif_data->profileToken, 128, profileIndex);
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
         if (result < 0)
             strcat(onvif_data->last_error, " getProfileToken");
@@ -2673,20 +1915,13 @@ int getTimeOffset(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_tds, BAD_CAST "GetSystemDateAndTime", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
 
     if (reply != NULL) {
@@ -2697,54 +1932,13 @@ int getTimeOffset(struct OnvifData* onvif_data)
         char month_buf[16] = { 0 };
         char day_buf[16] = { 0 };
         char dst_buf[16] = { 0 };
-        getXmlValue(
-            reply,
-            BAD_CAST
-            "//s:Body//tds:GetSystemDateAndTimeResponse//"
-            "tds:SystemDateAndTime//tt:UTCDateTime//tt:Time//tt:Hour",
-            hour_buf, 16
-        );
-        getXmlValue(
-            reply,
-            BAD_CAST
-            "//s:Body//tds:GetSystemDateAndTimeResponse//"
-            "tds:SystemDateAndTime//tt:UTCDateTime//tt:Time//tt:Minute",
-            min_buf, 16
-        );
-        getXmlValue(
-            reply,
-            BAD_CAST
-            "//s:Body//tds:GetSystemDateAndTimeResponse//"
-            "tds:SystemDateAndTime//tt:UTCDateTime//tt:Time//tt:Second",
-            sec_buf, 16
-        );
-        getXmlValue(
-            reply,
-            BAD_CAST
-            "//s:Body//tds:GetSystemDateAndTimeResponse//"
-            "tds:SystemDateAndTime//tt:UTCDateTime//tt:Date//tt:Year",
-            year_buf, 16
-        );
-        getXmlValue(
-            reply,
-            BAD_CAST
-            "//s:Body//tds:GetSystemDateAndTimeResponse//"
-            "tds:SystemDateAndTime//tt:UTCDateTime//tt:Date//tt:Month",
-            month_buf, 16
-        );
-        getXmlValue(
-            reply,
-            BAD_CAST
-            "//s:Body//tds:GetSystemDateAndTimeResponse//"
-            "tds:SystemDateAndTime//tt:UTCDateTime//tt:Date//tt:Day",
-            day_buf, 16
-        );
-        getXmlValue(
-            reply,
-            BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//"
-                     "tds:SystemDateAndTime//tt:DaylightSavings",
-            dst_buf, 16
-        );
+        getXmlValue(reply, BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//tds:SystemDateAndTime//tt:UTCDateTime//tt:Time//tt:Hour", hour_buf, 16);
+        getXmlValue(reply, BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//tds:SystemDateAndTime//tt:UTCDateTime//tt:Time//tt:Minute", min_buf, 16);
+        getXmlValue(reply, BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//tds:SystemDateAndTime//tt:UTCDateTime//tt:Time//tt:Second", sec_buf, 16);
+        getXmlValue(reply, BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//tds:SystemDateAndTime//tt:UTCDateTime//tt:Date//tt:Year", year_buf, 16);
+        getXmlValue(reply, BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//tds:SystemDateAndTime//tt:UTCDateTime//tt:Date//tt:Month", month_buf, 16);
+        getXmlValue(reply, BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//tds:SystemDateAndTime//tt:UTCDateTime//tt:Date//tt:Day", day_buf, 16);
+        getXmlValue(reply, BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//tds:SystemDateAndTime//tt:DaylightSavings", dst_buf, 16);
 
         onvif_data->dst = false;
         int is_dst = 0;
@@ -2753,19 +1947,9 @@ int getTimeOffset(struct OnvifData* onvif_data)
             onvif_data->dst = true;
         }
 
-        getXmlValue(
-            reply,
-            BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//"
-                     "tds:SystemDateAndTime//tt:TimeZone//tt:TZ",
-            onvif_data->timezone, 128
-        );
+        getXmlValue(reply, BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//tds:SystemDateAndTime//tt:TimeZone//tt:TZ", onvif_data->timezone, 128);
         char dttype[16] = { 0 };
-        getXmlValue(
-            reply,
-            BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//"
-                     "tds:SystemDateAndTime//tt:DateTimeType",
-            dttype, 16
-        );
+        getXmlValue(reply, BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//tds:SystemDateAndTime//tt:DateTimeType", dttype, 16);
         onvif_data->datetimetype = dttype[0]; /* M == Manual, N == NTP */
 
         time_t now = time(NULL);
@@ -2774,8 +1958,9 @@ int getTimeOffset(struct OnvifData* onvif_data)
         /*
             bool special = false;
             if (strcmp(onvif_data->timezone,"UTC0") == 0) {
-                // special case - camera is running on local time believing
-           it is UTC special = true; struct tm *utc_here = gmtime(&now);
+                // special case - camera is running on local time believing it is UTC
+                special = true;
+            struct tm *utc_here = gmtime(&now);
             utc_here->tm_isdst = -1;
             utc_time_here = mktime(utc_here);
             }
@@ -2819,45 +2004,23 @@ int getStreamUri(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_trt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_trt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr getStreamUri = xmlNewTextChild(body, ns_trt, BAD_CAST "GetStreamUri", NULL);
     xmlNodePtr streamSetup = xmlNewTextChild(getStreamUri, ns_trt, BAD_CAST "StreamSetup", NULL);
-    xmlNewTextChild(
-        streamSetup, ns_tt, BAD_CAST "Stream", BAD_CAST "RTP-Unicast"
-    );
+    xmlNewTextChild(streamSetup, ns_tt, BAD_CAST "Stream", BAD_CAST "RTP-Unicast");
     xmlNodePtr transport = xmlNewTextChild(streamSetup, ns_tt, BAD_CAST "Transport", NULL);
     xmlNewTextChild(transport, ns_tt, BAD_CAST "Protocol", BAD_CAST "RTSP");
-    xmlNewTextChild(
-        getStreamUri, ns_trt, BAD_CAST "ProfileToken",
-        BAD_CAST onvif_data->profileToken
-    );
+    xmlNewTextChild(getStreamUri, ns_trt, BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
-        getXmlValue(
-            reply,
-            BAD_CAST
-            "//s:Body//trt:GetStreamUriResponse//trt:MediaUri//tt:Uri",
-            onvif_data->stream_uri, 1024
-        );
+        getXmlValue(reply, BAD_CAST "//s:Body//trt:GetStreamUriResponse//trt:MediaUri//tt:Uri", onvif_data->stream_uri, 1024);
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
         if (result < 0)
             strcat(onvif_data->last_error, " getStreamUri");
@@ -2877,45 +2040,23 @@ int getSnapshotUri(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_trt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt"
-    );
-    xmlNsPtr ns_tt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_trt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt");
+    xmlNsPtr ns_tt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/schema", BAD_CAST "tt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr getSnapshotUri = xmlNewTextChild(body, ns_trt, BAD_CAST "GetSnapshotUri", NULL);
     xmlNodePtr streamSetup = xmlNewTextChild(getSnapshotUri, ns_trt, BAD_CAST "StreamSetup", NULL);
-    xmlNewTextChild(
-        streamSetup, ns_tt, BAD_CAST "Stream", BAD_CAST "RTP-Unicast"
-    );
+    xmlNewTextChild(streamSetup, ns_tt, BAD_CAST "Stream", BAD_CAST "RTP-Unicast");
     xmlNodePtr transport = xmlNewTextChild(streamSetup, ns_tt, BAD_CAST "Transport", NULL);
     xmlNewTextChild(transport, ns_tt, BAD_CAST "Protocol", BAD_CAST "RTSP");
-    xmlNewTextChild(
-        getSnapshotUri, ns_trt, BAD_CAST "ProfileToken",
-        BAD_CAST onvif_data->profileToken
-    );
+    xmlNewTextChild(getSnapshotUri, ns_trt, BAD_CAST "ProfileToken", BAD_CAST onvif_data->profileToken);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
-        getXmlValue(
-            reply,
-            BAD_CAST
-            "//s:Body//trt:GetSnapshotUriResponse//trt:MediaUri//tt:Uri",
-            onvif_data->snapshot_uri, 1024
-        );
+        getXmlValue(reply, BAD_CAST "//s:Body//trt:GetSnapshotUriResponse//trt:MediaUri//tt:Uri", onvif_data->snapshot_uri, 1024);
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
         if (result < 0)
             strcat(onvif_data->last_error, " getSnapshotUri");
@@ -2935,119 +2076,63 @@ int getDeviceInformation(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_tds, BAD_CAST "GetDeviceInformation", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
-        getXmlValue(
-            reply,
-            BAD_CAST
-            "//s:Body//tds:GetDeviceInformationResponse//tds:SerialNumber",
-            onvif_data->serial_number, 128
-        );
+        getXmlValue(reply, BAD_CAST "//s:Body//tds:GetDeviceInformationResponse//tds:SerialNumber", onvif_data->serial_number, 128);
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
         if (result < 0)
             strcat(onvif_data->last_error, " getdeviceInformation");
         xmlFreeDoc(reply);
     } else {
         result = -1;
-        strcpy(
-            onvif_data->last_error, "getDeviceInformation - No XML reply"
-        );
+        strcpy(onvif_data->last_error, "getDeviceInformation - No XML reply");
     }
     return result;
 }
 
 void getDiscoveryXml2(char buffer[], int buf_size)
 {
-    char* xml_string = "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\" "
-                       "xmlns:a=\"http://schemas.xmlsoap.org/ws/2004/08/"
-                       "addressing\"><s:Header><a:Action "
-                       "s:mustUnderstand=\"1\">http://schemas.xmlsoap.org/ws/2005/04/"
-                       "discovery/Probe</"
-                       "a:Action><a:MessageID>uuid:6bbdae2d-f229-42c8-a27b-93880fb80826</"
-                       "a:MessageID><a:ReplyTo><a:Address>http://schemas.xmlsoap.org/ws/2004/"
-                       "08/addressing/role/anonymous</a:Address></a:ReplyTo><a:To "
-                       "s:mustUnderstand=\"1\">urn:schemas-xmlsoap-org:ws:2005:04:discovery</"
-                       "a:To></s:Header><s:Body><Probe "
-                       "xmlns=\"http://schemas.xmlsoap.org/ws/2005/04/discovery\"><d:Types "
-                       "xmlns:d=\"http://schemas.xmlsoap.org/ws/2005/04/discovery\" "
-                       "xmlns:dp0=\"http://www.onvif.org/ver10/device/wsdl\">dp0:Device</"
-                       "d:Types></Probe></s:Body></s:Envelope>";
+    char* xml_string = "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\" xmlns:a=\"http://schemas.xmlsoap.org/ws/2004/08/addressing\"><s:Header><a:Action s:mustUnderstand=\"1\">http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</a:Action><a:MessageID>uuid:6bbdae2d-f229-42c8-a27b-93880fb80826</a:MessageID><a:ReplyTo><a:Address>http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonymous</a:Address></a:ReplyTo><a:To s:mustUnderstand=\"1\">urn:schemas-xmlsoap-org:ws:2005:04:discovery</a:To></s:Header><s:Body><Probe xmlns=\"http://schemas.xmlsoap.org/ws/2005/04/discovery\"><d:Types xmlns:d=\"http://schemas.xmlsoap.org/ws/2005/04/discovery\" xmlns:dp0=\"http://www.onvif.org/ver10/device/wsdl\">dp0:Device</d:Types></Probe></s:Body></s:Envelope>";
     strcpy(buffer, xml_string);
 }
 
 void getDiscoveryXml(char buffer[], int buf_size, char uuid[47])
 {
-    for (int i = 0; i < buf_size; i++) buffer[i] = '\0';
+    for (int i = 0; i < buf_size; i++)
+        buffer[i] = '\0';
     getUUID(uuid);
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNewProp(
-        root, BAD_CAST "xmlns:SOAP-ENV",
-        BAD_CAST "http://www.w3.org/2003/05/soap-envelope"
-    );
-    xmlNewProp(
-        root, BAD_CAST "xmlns:a",
-        BAD_CAST "http://schemas.xmlsoap.org/ws/2004/08/addressing"
-    );
+    xmlNewProp(root, BAD_CAST "xmlns:SOAP-ENV", BAD_CAST "http://www.w3.org/2003/05/soap-envelope");
+    xmlNewProp(root, BAD_CAST "xmlns:a", BAD_CAST "http://schemas.xmlsoap.org/ws/2004/08/addressing");
     xmlNsPtr ns_env = xmlNewNs(root, NULL, BAD_CAST "SOAP-ENV");
     xmlNsPtr ns_a = xmlNewNs(root, NULL, BAD_CAST "a");
     xmlSetNs(root, ns_env);
     xmlNodePtr header = xmlNewTextChild(root, ns_env, BAD_CAST "Header", NULL);
-    xmlNodePtr action = xmlNewTextChild(
-        header, ns_a, BAD_CAST "Action",
-        BAD_CAST "http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe"
-    );
+    xmlNodePtr action = xmlNewTextChild(header, ns_a, BAD_CAST "Action", BAD_CAST "http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe");
     xmlNewProp(action, BAD_CAST "SOAP-ENV:mustUnderstand", BAD_CAST "1");
     xmlNodePtr messageid = xmlNewTextChild(header, ns_a, BAD_CAST "MessageID", BAD_CAST uuid);
     xmlNodePtr replyto = xmlNewTextChild(header, ns_a, BAD_CAST "ReplyTo", NULL);
-    xmlNodePtr address = xmlNewTextChild(
-        replyto, ns_a, BAD_CAST "Address",
-        BAD_CAST
-        "http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonymous"
-    );
-    xmlNodePtr to = xmlNewTextChild(
-        header, ns_a, BAD_CAST "To",
-        BAD_CAST "urn:schemas-xmlsoap-org:ws:2005:04:discovery"
-    );
+    xmlNodePtr address = xmlNewTextChild(replyto, ns_a, BAD_CAST "Address", BAD_CAST "http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonymous");
+    xmlNodePtr to = xmlNewTextChild(header, ns_a, BAD_CAST "To", BAD_CAST "urn:schemas-xmlsoap-org:ws:2005:04:discovery");
     xmlNewProp(to, BAD_CAST "SOAP-ENV:mustUnderstand", BAD_CAST "1");
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr probe = xmlNewTextChild(body, NULL, BAD_CAST "Probe", NULL);
-    xmlNewProp(
-        probe, BAD_CAST "xmlns:p",
-        BAD_CAST "http://schemas.xmlsoap.org/ws/2005/04/discovery"
-    );
+    xmlNewProp(probe, BAD_CAST "xmlns:p", BAD_CAST "http://schemas.xmlsoap.org/ws/2005/04/discovery");
     xmlNsPtr ns_p = xmlNewNs(probe, NULL, BAD_CAST "p");
     xmlSetNs(probe, ns_p);
-    xmlNodePtr types = xmlNewTextChild(
-        probe, NULL, BAD_CAST "Types", BAD_CAST "dp0:NetworkVideoTransmitter"
-    );
-    xmlNewProp(
-        types, BAD_CAST "xmlns:d",
-        BAD_CAST "http://schemas.xmlsoap.org/ws/2005/04/discovery"
-    );
-    xmlNewProp(
-        types, BAD_CAST "xmlns:dp0",
-        BAD_CAST "http://www.onvif.org/ver10/network/wsdl"
-    );
+    xmlNodePtr types = xmlNewTextChild(probe, NULL, BAD_CAST "Types", BAD_CAST "dp0:NetworkVideoTransmitter");
+    xmlNewProp(types, BAD_CAST "xmlns:d", BAD_CAST "http://schemas.xmlsoap.org/ws/2005/04/discovery");
+    xmlNewProp(types, BAD_CAST "xmlns:dp0", BAD_CAST "http://www.onvif.org/ver10/network/wsdl");
     xmlNsPtr ns_d = xmlNewNs(types, NULL, BAD_CAST "d");
     xmlSetNs(types, ns_d);
     xmlOutputBufferPtr outputbuffer = xmlAllocOutputBuffer(NULL);
@@ -3066,24 +2151,14 @@ int rebootCamera(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_tds, BAD_CAST "SystemReboot", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -3104,28 +2179,15 @@ int hardReset(struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr setSystemFactoryDefault = xmlNewTextChild(body, ns_tds, BAD_CAST "SetSystemFactoryDefault", NULL);
-    xmlNewTextChild(
-        setSystemFactoryDefault, ns_tds, BAD_CAST "FactoryDefault",
-        BAD_CAST "Hard"
-    );
+    xmlNewTextChild(setSystemFactoryDefault, ns_tds, BAD_CAST "FactoryDefault", BAD_CAST "Hard");
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         result = checkForXmlErrorMsg(reply, onvif_data->last_error);
@@ -3144,24 +2206,14 @@ void saveSystemDateAndTime(char* filename, struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_tds, BAD_CAST "GetSystemDateAndTime", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         xmlSaveFormatFile(filename, reply, 1);
@@ -3174,24 +2226,14 @@ void saveScopes(char* filename, struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_tds, BAD_CAST "GetScopes", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         xmlSaveFormatFile(filename, reply, 1);
@@ -3204,24 +2246,14 @@ void saveDeviceInformation(char* filename, struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_tds, BAD_CAST "GetDeviceInformation", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         xmlSaveFormatFile(filename, reply, 1);
@@ -3234,24 +2266,14 @@ void saveCapabilities(char* filename, struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_tds = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_tds = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl", BAD_CAST "tds");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_tds, BAD_CAST "GetCapabilities", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         xmlSaveFormatFile(filename, reply, 1);
@@ -3264,24 +2286,14 @@ void saveProfiles(char* filename, struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_trt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_trt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_trt, BAD_CAST "GetProfiles", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         xmlSaveFormatFile(filename, reply, 1);
@@ -3294,24 +2306,14 @@ void saveServiceCapabilities(char* filename, struct OnvifData* onvif_data)
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
-    xmlNsPtr ns_env = xmlNewNs(
-        root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-        BAD_CAST "SOAP-ENV"
-    );
-    xmlNsPtr ns_trt = xmlNewNs(
-        root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt"
-    );
+    xmlNsPtr ns_env = xmlNewNs(root, BAD_CAST "http://www.w3.org/2003/05/soap-envelope", BAD_CAST "SOAP-ENV");
+    xmlNsPtr ns_trt = xmlNewNs(root, BAD_CAST "http://www.onvif.org/ver10/media/wsdl", BAD_CAST "trt");
     xmlSetNs(root, ns_env);
-    addUsernameDigestHeader(
-        root, ns_env, onvif_data->username, onvif_data->password,
-        onvif_data->time_offset
-    );
+    addUsernameDigestHeader(root, ns_env, onvif_data->username, onvif_data->password, onvif_data->time_offset);
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNewTextChild(body, ns_trt, BAD_CAST "GetServiceCapabilities", NULL);
     char cmd[4096] = { 0 };
-    addHttpHeader(
-        doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
-    );
+    addHttpHeader(doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096);
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
     if (reply != NULL) {
         xmlSaveFormatFile(filename, reply, 1);
@@ -3326,43 +2328,16 @@ int getXmlValue(xmlDocPtr doc, xmlChar* xpath, char buf[], int buf_length)
     if (!context)
         return -1;
 
-    xmlXPathRegisterNs(
-        context, BAD_CAST "s",
-        BAD_CAST "http://www.w3.org/2003/05/soap-envelope"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "trt",
-        BAD_CAST "http://www.onvif.org/ver10/media/wsdl"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "tt", BAD_CAST "http://www.onvif.org/ver10/schema"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "tds",
-        BAD_CAST "http://www.onvif.org/ver10/device/wsdl"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "timg",
-        BAD_CAST "http://www.onvif.org/ver20/imaging/wsdl"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "wsa5",
-        BAD_CAST "http://www.w3.org/2005/08/addressing"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "wsnt", BAD_CAST "http://docs.oasis-open.org/wsn/b-2"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "d",
-        BAD_CAST "http://schemas.xmlsoap.org/ws/2005/04/discovery"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "ter", BAD_CAST "http://www.onvif.org/ver10/error"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "a",
-        BAD_CAST "http://schemas.xmlsoap.org/ws/2004/08/addressing"
-    );
+    xmlXPathRegisterNs(context, BAD_CAST "s", BAD_CAST "http://www.w3.org/2003/05/soap-envelope");
+    xmlXPathRegisterNs(context, BAD_CAST "trt", BAD_CAST "http://www.onvif.org/ver10/media/wsdl");
+    xmlXPathRegisterNs(context, BAD_CAST "tt", BAD_CAST "http://www.onvif.org/ver10/schema");
+    xmlXPathRegisterNs(context, BAD_CAST "tds", BAD_CAST "http://www.onvif.org/ver10/device/wsdl");
+    xmlXPathRegisterNs(context, BAD_CAST "timg", BAD_CAST "http://www.onvif.org/ver20/imaging/wsdl");
+    xmlXPathRegisterNs(context, BAD_CAST "wsa5", BAD_CAST "http://www.w3.org/2005/08/addressing");
+    xmlXPathRegisterNs(context, BAD_CAST "wsnt", BAD_CAST "http://docs.oasis-open.org/wsn/b-2");
+    xmlXPathRegisterNs(context, BAD_CAST "d", BAD_CAST "http://schemas.xmlsoap.org/ws/2005/04/discovery");
+    xmlXPathRegisterNs(context, BAD_CAST "ter", BAD_CAST "http://www.onvif.org/ver10/error");
+    xmlXPathRegisterNs(context, BAD_CAST "a", BAD_CAST "http://schemas.xmlsoap.org/ws/2004/08/addressing");
 
     xmlXPathObjectPtr result = xmlXPathEvalExpression(xpath, context);
     xmlXPathFreeContext(context);
@@ -3371,20 +2346,12 @@ int getXmlValue(xmlDocPtr doc, xmlChar* xpath, char buf[], int buf_length)
         return -2;
 
     if (xmlXPathNodeSetIsEmpty(result->nodesetval)) {
-        if ((strcmp(
-                 (char*)xpath,
-                 "//s:Body//s:Fault//s:Code//s:Subcode//s:Value"
-             )
-             != 0)
-            && (strcmp((char*)xpath, "//s:Body//s:Fault//s:Reason//s:Text") != 0)) {
-        }
+        if ((strcmp((char*)xpath, "//s:Body//s:Fault//s:Code//s:Subcode//s:Value") != 0) && (strcmp((char*)xpath, "//s:Body//s:Fault//s:Reason//s:Text") != 0)) { }
         xmlXPathFreeObject(result);
         return -3;
     }
 
-    xmlChar* keyword = xmlNodeListGetString(
-        doc, result->nodesetval->nodeTab[0]->xmlChildrenNode, 1
-    );
+    xmlChar* keyword = xmlNodeListGetString(doc, result->nodesetval->nodeTab[0]->xmlChildrenNode, 1);
     if (keyword) {
         memset(buf, 0, buf_length);
         strncpy(buf, (char*)keyword, buf_length);
@@ -3395,49 +2362,22 @@ int getXmlValue(xmlDocPtr doc, xmlChar* xpath, char buf[], int buf_length)
     return 0;
 }
 
-int getNodeAttributen(
-    xmlDocPtr doc, xmlChar* xpath, xmlChar* attribute, char buf[],
-    int buf_length, int profileIndex
-)
+int getNodeAttributen(xmlDocPtr doc, xmlChar* xpath, xmlChar* attribute, char buf[], int buf_length, int profileIndex)
 {
     xmlChar* keyword = NULL;
     xmlXPathContextPtr context = xmlXPathNewContext(doc);
     if (context == NULL) {
         return -1;
     }
-    xmlXPathRegisterNs(
-        context, BAD_CAST "s",
-        BAD_CAST "http://www.w3.org/2003/05/soap-envelope"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "trt",
-        BAD_CAST "http://www.onvif.org/ver10/media/wsdl"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "tt", BAD_CAST "http://www.onvif.org/ver10/schema"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "tds",
-        BAD_CAST "http://www.onvif.org/ver10/device/wsdl"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "timg",
-        BAD_CAST "http://www.onvif.org/ver20/imaging/wsdl"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "wsa5",
-        BAD_CAST "http://www.w3.org/2005/08/addressing"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "wsnt", BAD_CAST "http://docs.oasis-open.org/wsn/b-2"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "ter", BAD_CAST "http://www.onvif.org/ver10/error"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "a",
-        BAD_CAST "http://schemas.xmlsoap.org/ws/2004/08/addressing"
-    );
+    xmlXPathRegisterNs(context, BAD_CAST "s", BAD_CAST "http://www.w3.org/2003/05/soap-envelope");
+    xmlXPathRegisterNs(context, BAD_CAST "trt", BAD_CAST "http://www.onvif.org/ver10/media/wsdl");
+    xmlXPathRegisterNs(context, BAD_CAST "tt", BAD_CAST "http://www.onvif.org/ver10/schema");
+    xmlXPathRegisterNs(context, BAD_CAST "tds", BAD_CAST "http://www.onvif.org/ver10/device/wsdl");
+    xmlXPathRegisterNs(context, BAD_CAST "timg", BAD_CAST "http://www.onvif.org/ver20/imaging/wsdl");
+    xmlXPathRegisterNs(context, BAD_CAST "wsa5", BAD_CAST "http://www.w3.org/2005/08/addressing");
+    xmlXPathRegisterNs(context, BAD_CAST "wsnt", BAD_CAST "http://docs.oasis-open.org/wsn/b-2");
+    xmlXPathRegisterNs(context, BAD_CAST "ter", BAD_CAST "http://www.onvif.org/ver10/error");
+    xmlXPathRegisterNs(context, BAD_CAST "a", BAD_CAST "http://schemas.xmlsoap.org/ws/2004/08/addressing");
 
     xmlXPathObjectPtr result = xmlXPathEvalExpression(xpath, context);
     xmlXPathFreeContext(context);
@@ -3455,16 +2395,15 @@ int getNodeAttributen(
         if (profileIndex >= result->nodesetval->nodeNr)
             return -5;
 
-        keyword = xmlGetProp(
-            result->nodesetval->nodeTab[profileIndex], attribute
-        );
+        keyword = xmlGetProp(result->nodesetval->nodeTab[profileIndex], attribute);
         if (keyword != NULL) {
             if (strlen((char*)keyword) > buf_length - 1) {
                 xmlXPathFreeObject(result);
                 xmlFree(keyword);
                 return -4;
             } else {
-                for (int i = 0; i < buf_length; i++) buf[i] = '\0';
+                for (int i = 0; i < buf_length; i++)
+                    buf[i] = '\0';
                 strcpy(buf, (char*)keyword);
             }
         }
@@ -3485,32 +2424,13 @@ xmlXPathObjectPtr getNodeSet(xmlDocPtr doc, xmlChar* xpath)
     if (context == NULL) {
         return NULL;
     }
-    xmlXPathRegisterNs(
-        context, BAD_CAST "s",
-        BAD_CAST "http://www.w3.org/2003/05/soap-envelope"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "trt",
-        BAD_CAST "http://www.onvif.org/ver10/media/wsdl"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "tt", BAD_CAST "http://www.onvif.org/ver10/schema"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "tds",
-        BAD_CAST "http://www.onvif.org/ver10/device/wsdl"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "timg",
-        BAD_CAST "http://www.onvif.org/ver20/imaging/wsdl"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "wsa5",
-        BAD_CAST "http://www.w3.org/2005/08/addressing"
-    );
-    xmlXPathRegisterNs(
-        context, BAD_CAST "wsnt", BAD_CAST "http://docs.oasis-open.org/wsn/b-2"
-    );
+    xmlXPathRegisterNs(context, BAD_CAST "s", BAD_CAST "http://www.w3.org/2003/05/soap-envelope");
+    xmlXPathRegisterNs(context, BAD_CAST "trt", BAD_CAST "http://www.onvif.org/ver10/media/wsdl");
+    xmlXPathRegisterNs(context, BAD_CAST "tt", BAD_CAST "http://www.onvif.org/ver10/schema");
+    xmlXPathRegisterNs(context, BAD_CAST "tds", BAD_CAST "http://www.onvif.org/ver10/device/wsdl");
+    xmlXPathRegisterNs(context, BAD_CAST "timg", BAD_CAST "http://www.onvif.org/ver20/imaging/wsdl");
+    xmlXPathRegisterNs(context, BAD_CAST "wsa5", BAD_CAST "http://www.w3.org/2005/08/addressing");
+    xmlXPathRegisterNs(context, BAD_CAST "wsnt", BAD_CAST "http://docs.oasis-open.org/wsn/b-2");
 
     result = xmlXPathEvalExpression(xpath, context);
     xmlXPathFreeContext(context);
@@ -3592,10 +2512,7 @@ xmlDocPtr sendCommandToCamera(char* cmd, char* xaddrs)
         doc = xmlNewDoc(BAD_CAST "1.0");
         root_node = xmlNewNode(NULL, BAD_CAST "root");
         xmlDocSetRootElement(doc, root_node);
-        xmlNewChild(
-            root_node, NULL, BAD_CAST "error",
-            BAD_CAST "Network error, unable to connect"
-        );
+        xmlNewChild(root_node, NULL, BAD_CAST "error", BAD_CAST "Network error, unable to connect");
         return doc;
     }
 
@@ -3695,11 +2612,7 @@ xmlDocPtr sendCommandToCamera(char* cmd, char* xaddrs)
 
 int checkForXmlErrorMsg(xmlDocPtr doc, char error_msg[1024])
 {
-    if (getXmlValue(
-            doc, BAD_CAST "//s:Body//s:Fault//s:Code//s:Subcode//s:Value",
-            error_msg, 1024
-        )
-        == 0) {
+    if (getXmlValue(doc, BAD_CAST "//s:Body//s:Fault//s:Code//s:Subcode//s:Value", error_msg, 1024) == 0) {
         return -1;
     } else if (getXmlValue(doc, BAD_CAST "//s:Body//s:Fault//s:Reason//s:Text", error_msg, 1024) == 0) {
         return -1;
@@ -3717,11 +2630,12 @@ int checkForXmlErrorMsg(xmlDocPtr doc, char error_msg[1024])
     return 0;
 }
 
-void addUsernameDigestHeader(
-    xmlNodePtr root, xmlNsPtr ns_env, char* user, char* password, time_t offset
-)
+void addUsernameDigestHeader(xmlNodePtr root, xmlNsPtr ns_env, char* user, char* password, time_t offset)
 {
-    srand(time(NULL));
+    if (!rand_seeded) {
+        srand(time(NULL));
+        rand_seeded = true;
+    }
 
 #ifdef _WIN32
     _setmode(0, O_BINARY);
@@ -3787,44 +2701,18 @@ void addUsernameDigestHeader(
     strcpy(time_holder, time_buffer);
     strcpy(digest_base64, (const char*)digest_result);
 
-    xmlNsPtr ns_wsse = xmlNewNs(
-        root,
-        BAD_CAST "http://docs.oasis-open.org/wss/2004/01/"
-                 "oasis-200401-wss-wssecurity-secext-1.0.xsd",
-        BAD_CAST "wsse"
-    );
-    xmlNsPtr ns_wsu = xmlNewNs(
-        root,
-        BAD_CAST "http://docs.oasis-open.org/wss/2004/01/"
-                 "oasis-200401-wss-wssecurity-utility-1.0.xsd",
-        BAD_CAST "wsu"
-    );
+    xmlNsPtr ns_wsse = xmlNewNs(root, BAD_CAST "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd", BAD_CAST "wsse");
+    xmlNsPtr ns_wsu = xmlNewNs(root, BAD_CAST "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd", BAD_CAST "wsu");
     xmlNodePtr header = xmlNewTextChild(root, ns_env, BAD_CAST "Header", NULL);
     xmlNodePtr security = xmlNewTextChild(header, ns_wsse, BAD_CAST "Security", NULL);
     xmlNewProp(security, BAD_CAST "SOAP-ENV:mustUnderstand", BAD_CAST "1");
     xmlNodePtr username_token = xmlNewTextChild(security, ns_wsse, BAD_CAST "UsernameToken", NULL);
-    xmlNewTextChild(
-        username_token, ns_wsse, BAD_CAST "Username", BAD_CAST user
-    );
-    xmlNodePtr pwd = xmlNewTextChild(
-        username_token, ns_wsse, BAD_CAST "Password", BAD_CAST digest_base64
-    );
-    xmlNewProp(
-        pwd, BAD_CAST "Type",
-        BAD_CAST "http://docs.oasis-open.org/wss/2004/01/"
-                 "oasis-200401-wss-username-token-profile-1.0#PasswordDigest"
-    );
-    xmlNodePtr nonce = xmlNewTextChild(
-        username_token, ns_wsse, BAD_CAST "Nonce", BAD_CAST nonce_base64
-    );
-    xmlNewProp(
-        nonce, BAD_CAST "EncodingType",
-        BAD_CAST "http://docs.oasis-open.org/wss/2004/01/"
-                 "oasis-200401-wss-soap-message-security-1.0#Base64Binary"
-    );
-    xmlNewTextChild(
-        username_token, ns_wsu, BAD_CAST "Created", BAD_CAST time_holder
-    );
+    xmlNewTextChild(username_token, ns_wsse, BAD_CAST "Username", BAD_CAST user);
+    xmlNodePtr pwd = xmlNewTextChild(username_token, ns_wsse, BAD_CAST "Password", BAD_CAST digest_base64);
+    xmlNewProp(pwd, BAD_CAST "Type", BAD_CAST "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest");
+    xmlNodePtr nonce = xmlNewTextChild(username_token, ns_wsse, BAD_CAST "Nonce", BAD_CAST nonce_base64);
+    xmlNewProp(nonce, BAD_CAST "EncodingType", BAD_CAST "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary");
+    xmlNewTextChild(username_token, ns_wsu, BAD_CAST "Created", BAD_CAST time_holder);
 }
 
 void getBase64(unsigned char* buffer, int chunk_size, unsigned char* result)
@@ -3840,10 +2728,7 @@ void getBase64(unsigned char* buffer, int chunk_size, unsigned char* result)
     *c = 0;
 }
 
-void addHttpHeader(
-    xmlDocPtr doc, xmlNodePtr root, char* xaddrs, char* post_type, char cmd[],
-    int cmd_length
-)
+void addHttpHeader(xmlDocPtr doc, xmlNodePtr root, char* xaddrs, char* post_type, char cmd[], int cmd_length)
 {
     xmlOutputBufferPtr outputbuffer = xmlAllocOutputBuffer(NULL);
     xmlNodeDumpOutput(outputbuffer, doc, root, 0, 0, NULL);
@@ -3925,25 +2810,35 @@ void addHttpHeader(
     int cmd_size = p + c + h + cl + xml_size_length + size + 1;
     int i;
     int s;
-    for (i = 0; i < p - 1; i++) cmd[i] = post_type[i];
+    for (i = 0; i < p - 1; i++)
+        cmd[i] = post_type[i];
     s = i;
-    for (i = 0; i < c - 1; i++) cmd[s + i] = content[i];
+    for (i = 0; i < c - 1; i++)
+        cmd[s + i] = content[i];
     s = s + i;
-    for (i = 0; i < h - 1; i++) cmd[s + i] = host[i];
+    for (i = 0; i < h - 1; i++)
+        cmd[s + i] = host[i];
     s = s + i;
-    for (i = 0; i < cl - 1; i++) cmd[s + i] = content_length[i];
+    for (i = 0; i < cl - 1; i++)
+        cmd[s + i] = content_length[i];
     s = s + i;
-    for (i = 0; i < xml_size_length - 1; i++) cmd[s + i] = c_xml_size[i];
+    for (i = 0; i < xml_size_length - 1; i++)
+        cmd[s + i] = c_xml_size[i];
     s = s + i;
-    for (i = 0; i < 5 - 1; i++) cmd[s + i] = http_terminate[i];
+    for (i = 0; i < 5 - 1; i++)
+        cmd[s + i] = http_terminate[i];
     s = s + i;
-    for (i = 0; i < size; i++) cmd[s + i] = xml[i];
+    for (i = 0; i < size; i++)
+        cmd[s + i] = xml[i];
     cmd[cmd_size] = '\0';
 }
 
 void getUUID(char uuid_buf[47])
 {
-    srand(time(NULL));
+    if (!rand_seeded) {
+        srand(time(NULL));
+        rand_seeded = true;
+    }
     strcpy(uuid_buf, "urn:uuid:");
     for (int i = 0; i < 16; i++) {
         char buf[3];
@@ -3981,10 +2876,7 @@ int broadcast(struct OnvifSession* onvif_session)
     broadcast_address.sin_family = AF_INET;
     broadcast_address.sin_port = htons(3702);
     broadcast_address.sin_addr.s_addr = inet_addr("239.255.255.250");
-    int status = sendto(
-        broadcast_socket, broadcast_message, broadcast_message_length, 0,
-        (struct sockaddr*)&broadcast_address, sizeof(broadcast_address)
-    );
+    int status = sendto(broadcast_socket, broadcast_message, broadcast_message_length, 0, (struct sockaddr*)&broadcast_address, sizeof(broadcast_address));
     if (status < 0) {
         // error
     }
@@ -3993,11 +2885,7 @@ int broadcast(struct OnvifSession* onvif_session)
     unsigned char looping = 1;
     address_size = sizeof(broadcast_address);
     while (looping) {
-        onvif_session->len[i] = recvfrom(
-            broadcast_socket, onvif_session->buf[i],
-            sizeof(onvif_session->buf[i]), 0,
-            (struct sockaddr*)&broadcast_address, &address_size
-        );
+        onvif_session->len[i] = recvfrom(broadcast_socket, onvif_session->buf[i], sizeof(onvif_session->buf[i]), 0, (struct sockaddr*)&broadcast_address, &address_size);
         if (onvif_session->len[i] > 0) {
             onvif_session->buf[i][onvif_session->len[i]] = '\0';
             // printf("session buf: %s\n", onvif_session->buf[i]);
@@ -4059,8 +2947,7 @@ void getActiveNetworkInterfaces(struct OnvifSession* onvif_session)
         free(pAdapterInfo);
         pAdapterInfo = (IP_ADAPTER_INFO*)malloc(ulOutBufLen);
         if (pAdapterInfo == NULL) {
-            printf("Error allocating memory needed to call "
-                   "GetAdaptersinfo\n");
+            printf("Error allocating memory needed to call GetAdaptersinfo\n");
             return;
         }
     }
@@ -4069,42 +2956,21 @@ void getActiveNetworkInterfaces(struct OnvifSession* onvif_session)
     if ((dwRetVal = GetAdaptersInfo(pAdapterInfo, &ulOutBufLen)) == NO_ERROR) {
         pAdapter = pAdapterInfo;
         while (pAdapter) {
-            if (strcmp(
-                    pAdapter->IpAddressList.IpAddress.String, "0.0.0.0"
-                )) {
+            if (strcmp(pAdapter->IpAddressList.IpAddress.String, "0.0.0.0")) {
                 char interface_info[1024] = { 0 };
-                // sprintf(interface_info, "%s - %s",
-                // pAdapter->IpAddressList.IpAddress.String,
-                // pAdapter->Description);
-                sprintf(
-                    interface_info, "%s",
-                    pAdapter->IpAddressList.IpAddress.String
-                );
-                // printf("Network interface info %s\n",
-                // interface_info); printf("Combo Index: %d\n",
-                // pAdapter->ComboIndex);
+                // sprintf(interface_info, "%s - %s", pAdapter->IpAddressList.IpAddress.String, pAdapter->Description);
+                sprintf(interface_info, "%s", pAdapter->IpAddressList.IpAddress.String);
+                // printf("Network interface info %s\n", interface_info);
+                // printf("Combo Index: %d\n", pAdapter->ComboIndex);
                 DWORD priority = GetNetworkPriority(pAdapter->ComboIndex);
                 // printf("Priority: %d\n", priority);
 
                 if (priority < highest_priority) {
                     highest_priority = priority;
-                    strncpy(
-                        onvif_session
-                            ->primary_network_interface,
-                        interface_info,
-                        min(strlen(interface_info),
-                            sizeof(
-                                onvif_session
-                                    ->primary_network_interface
-                            ))
-                    );
+                    strncpy(onvif_session->primary_network_interface, interface_info, min(strlen(interface_info), sizeof(onvif_session->primary_network_interface)));
                 }
 
-                strncpy(
-                    onvif_session->active_network_interfaces[count],
-                    interface_info,
-                    min(strlen(interface_info), 1024)
-                );
+                strncpy(onvif_session->active_network_interfaces[count], interface_info, min(strlen(interface_info), 1024));
                 count += 1;
             }
             pAdapter = pAdapter->Next;
@@ -4115,8 +2981,7 @@ void getActiveNetworkInterfaces(struct OnvifSession* onvif_session)
     if (pAdapterInfo)
         free(pAdapterInfo);
 
-        // printf("Primary Interface: %s\n",
-        // onvif_session->primary_network_interface);
+        // printf("Primary Interface: %s\n", onvif_session->primary_network_interface);
 
 #else
     struct ifaddrs* ifaddr;
@@ -4136,27 +3001,17 @@ void getActiveNetworkInterfaces(struct OnvifSession* onvif_session)
         family = ifa->ifa_addr->sa_family;
 
         if (family == AF_INET) {
-            s = getnameinfo(
-                ifa->ifa_addr, sizeof(struct sockaddr_in), host,
-                NI_MAXHOST, NULL, 0, NI_NUMERICHOST
-            );
+            s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
 
             if (s != 0) {
-                printf(
-                    "getnameinfo() failed: %s\n", gai_strerror(s)
-                );
+                printf("getnameinfo() failed: %s\n", gai_strerror(s));
                 continue;
             }
 
             if (strcmp(host, "127.0.0.1")) {
-                strcpy(
-                    onvif_session->active_network_interfaces[count],
-                    host
-                );
-                // strcat(onvif_session->active_network_interfaces[count],
-                // " - ");
-                // strcat(onvif_session->active_network_interfaces[count],
-                // ifa->ifa_name);
+                strcpy(onvif_session->active_network_interfaces[count], host);
+                // strcat(onvif_session->active_network_interfaces[count], " - ");
+                // strcat(onvif_session->active_network_interfaces[count], ifa->ifa_name);
                 count += 1;
             }
         }
@@ -4215,9 +3070,7 @@ void getIPAddress(char buf[128])
     if (success == 0) {
         temp_addr = interfaces;
         while (temp_addr != NULL) {
-            address = inet_ntoa(
-                ((struct sockaddr_in*)temp_addr->ifa_addr)->sin_addr
-            );
+            address = inet_ntoa(((struct sockaddr_in*)temp_addr->ifa_addr)->sin_addr);
             if (strcmp(address, "127.0.0.1") != 0)
                 strcpy(buf, address);
         }
@@ -4244,42 +3097,17 @@ void getIPAddress(char buf[128])
                 }
 
                 if (ioctl(sd, SIOCGIFNETMASK, &ifr[i]) == 0) {
-                    mask = ((struct sockaddr_in*)(&ifr[i].ifr_netmask))
-                               ->sin_addr.s_addr;
+                    mask = ((struct sockaddr_in*)(&ifr[i].ifr_netmask))->sin_addr.s_addr;
                     char mask_buf[128] = { 0 };
-                    sprintf(
-                        mask_buf, "%d.%d.%d.%d",
-                        INT_TO_ADDR(mask)
-                    );
+                    sprintf(mask_buf, "%d.%d.%d.%d", INT_TO_ADDR(mask));
                     if (strcmp(mask_buf, "255.255.255.0") == 0) {
-                        if (ioctl(
-                                sd, SIOCGIFADDR, &ifr[i]
-                            )
-                            == 0) {
-                            addr = ((struct sockaddr_in*)(&ifr[i]
-                                                               .ifr_addr)
-                            )
-                                       ->sin_addr.s_addr;
+                        if (ioctl(sd, SIOCGIFADDR, &ifr[i]) == 0) {
+                            addr = ((struct sockaddr_in*)(&ifr[i].ifr_addr))->sin_addr.s_addr;
                             char addr_buf[128] = { 0 };
-                            sprintf(
-                                addr_buf, "%d.%d.%d.%d",
-                                INT_TO_ADDR(addr)
-                            );
-                            if (strcmp(
-                                    addr_buf,
-                                    "127.0.0.1"
-                                )
-                                != 0) {
-                                printf(
-                                    "--------------"
-                                    "--------------"
-                                    "--------------"
-                                    "-----%s\n",
-                                    addr_buf
-                                );
-                                strcpy(
-                                    buf, addr_buf
-                                );
+                            sprintf(addr_buf, "%d.%d.%d.%d", INT_TO_ADDR(addr));
+                            if (strcmp(addr_buf, "127.0.0.1") != 0) {
+                                printf("-----------------------------------------------%s\n", addr_buf);
+                                strcpy(buf, addr_buf);
                             }
                         }
                     }
@@ -4371,10 +3199,7 @@ int setSocketOptions(int socket)
             } else {
                 localInterface.s_addr = pIPAddrTable->table[p].dwAddr;
             }
-            status = setsockopt(
-                socket, IPPROTO_IP, IP_MULTICAST_IF,
-                (const char*)&localInterface, sizeof(localInterface)
-            );
+            status = setsockopt(socket, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&localInterface, sizeof(localInterface));
             if (status < 0)
                 printf("ip_multicast_if error");
             p = (int)pIPAddrTable->dwNumEntries;
@@ -4387,28 +3212,17 @@ int setSocketOptions(int socket)
         pIPAddrTable = NULL;
     }
 
-    status = setsockopt(
-        socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&broadcast,
-        sizeof(broadcast)
-    );
+    status = setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&broadcast, sizeof(broadcast));
 #else
     if (strlen(preferred_network_address) > 0) {
         localInterface.s_addr = inet_addr(preferred_network_address);
-        status = setsockopt(
-            socket, IPPROTO_IP, IP_MULTICAST_IF,
-            (const char*)&localInterface, sizeof(localInterface)
-        );
+        status = setsockopt(socket, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&localInterface, sizeof(localInterface));
         if (status < 0)
             printf("ip_multicast_if error");
     }
-    status = setsockopt(
-        socket, SOL_SOCKET, SO_RCVTIMEO, (struct timeval*)&tv,
-        sizeof(struct timeval)
-    );
+    status = setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (struct timeval*)&tv, sizeof(struct timeval));
 #endif
-    status = setsockopt(
-        socket, IPPROTO_IP, IP_MULTICAST_LOOP, (char*)&loopch, sizeof(loopch)
-    );
+    status = setsockopt(socket, IPPROTO_IP, IP_MULTICAST_LOOP, (char*)&loopch, sizeof(loopch));
     return 0;
 }
 
@@ -4451,15 +3265,11 @@ const char* inet_ntop(int af, const void* src, char* dst, socklen_t size)
         case AF_INET6:
             ((struct sockaddr_in6*)&ss)->sin6_addr = *(struct in6_addr*)src;
             break;
-        default: return NULL;
+        default:
+            return NULL;
     }
 
-    return (WSAAddressToString(
-                (struct sockaddr*)&ss, sizeof(ss), NULL, dst, &s
-            )
-            == 0)
-        ? dst
-        : NULL;
+    return (WSAAddressToString((struct sockaddr*)&ss, sizeof(ss), NULL, dst, &s) == 0) ? dst : NULL;
 }
 #endif
 
@@ -4519,7 +3329,8 @@ void extractHost(char* xaddrs, char host[128])
 
     if (mark = strstr(tmp, "/")) {
         int end = mark - tmp;
-        for (int j = end; j < strlen(tmp); j++) tmp[j] = '\0';
+        for (int j = end; j < strlen(tmp); j++)
+            tmp[j] = '\0';
     }
 
     if (mark = strstr(tmp, ":")) {
@@ -4576,21 +3387,14 @@ void getScopeField(char* scope, char* field_name, char cleaned[1024])
     }
 }
 
-void getCameraName(
-    int ordinal, struct OnvifSession* onvif_session,
-    struct OnvifData* onvif_data
-)
+void getCameraName(int ordinal, struct OnvifSession* onvif_session, struct OnvifData* onvif_data)
 {
-    xmlDocPtr xml_input = xmlParseMemory(
-        onvif_session->buf[ordinal], onvif_session->len[ordinal]
-    );
-    for (int i = 0; i < 1024; i++) onvif_data->camera_name[i] = '\0';
+    xmlDocPtr xml_input = xmlParseMemory(onvif_session->buf[ordinal], onvif_session->len[ordinal]);
+    for (int i = 0; i < 1024; i++)
+        onvif_data->camera_name[i] = '\0';
 
     char scopes[8192];
-    getXmlValue(
-        xml_input, BAD_CAST "//s:Body//d:ProbeMatches//d:ProbeMatch//d:Scopes",
-        scopes, 8192
-    );
+    getXmlValue(xml_input, BAD_CAST "//s:Body//d:ProbeMatches//d:ProbeMatch//d:Scopes", scopes, 8192);
 
     char temp_mfgr[1024] = { 0 };
     char temp_hdwr[1024] = { 0 };
@@ -4614,21 +3418,11 @@ void getCameraName(
     xmlFreeDoc(xml_input);
 }
 
-bool extractXAddrs(
-    int ordinal, struct OnvifSession* onvif_session,
-    struct OnvifData* onvif_data
-)
+bool extractXAddrs(int ordinal, struct OnvifSession* onvif_session, struct OnvifData* onvif_data)
 {
     bool result = false;
-    xmlDocPtr xml_input = xmlParseMemory(
-        onvif_session->buf[ordinal], onvif_session->len[ordinal]
-    );
-    if (getXmlValue(
-            xml_input,
-            BAD_CAST "//s:Body//d:ProbeMatches//d:ProbeMatch//d:XAddrs",
-            onvif_data->xaddrs, 1024
-        )
-        == 0) {
+    xmlDocPtr xml_input = xmlParseMemory(onvif_session->buf[ordinal], onvif_session->len[ordinal]);
+    if (getXmlValue(xml_input, BAD_CAST "//s:Body//d:ProbeMatches//d:ProbeMatch//d:XAddrs", onvif_data->xaddrs, 1024) == 0) {
         char* sub = strstr(onvif_data->xaddrs, " ");
         if (sub != NULL) {
             int mark = sub - onvif_data->xaddrs;
@@ -4906,10 +3700,7 @@ void closeSession(struct OnvifSession* onvif_session)
     xmlCleanupParser();
 }
 
-bool prepareOnvifData(
-    int ordinal, struct OnvifSession* onvif_session,
-    struct OnvifData* onvif_data
-)
+bool prepareOnvifData(int ordinal, struct OnvifSession* onvif_session, struct OnvifData* onvif_data)
 {
     clearData(onvif_data);
     getCameraName(ordinal, onvif_session, onvif_data);
@@ -4955,25 +3746,14 @@ void dumpXmlNode(xmlDocPtr doc, xmlNodePtr cur_node, char* prefix)
     for (; cur_node; cur_node = cur_node->next) {
         if (cur_node->type == XML_ELEMENT_NODE) {
             name = (char*)(cur_node->name);
-            value = (const char*)xmlNodeListGetString(
-                doc, cur_node->xmlChildrenNode, 1
-            );
+            value = (const char*)xmlNodeListGetString(doc, cur_node->xmlChildrenNode, 1);
             if (value) {
-                printf(
-                    "%s%s=%s\n", prefix ? prefix : "", name, value
-                );
+                printf("%s%s=%s\n", prefix ? prefix : "", name, value);
             } else {
-                sprintf(
-                    new_prefix, "%s%s.", prefix ? prefix : "", name
-                );
-                for (prop = cur_node->properties; prop;
-                     prop = prop->next) {
+                sprintf(new_prefix, "%s%s.", prefix ? prefix : "", name);
+                for (prop = cur_node->properties; prop; prop = prop->next) {
                     if (prop->children && prop->children->content) {
-                        printf(
-                            "%s%s=%s\n", new_prefix,
-                            prop->name,
-                            prop->children->content
-                        );
+                        printf("%s%s=%s\n", new_prefix, prop->name, prop->children->content);
                     }
                 }
             }

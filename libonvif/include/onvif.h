@@ -155,6 +155,7 @@ struct OnvifData {
     bool hidden;
     int cache_max;
     bool sync_audio;
+    float position[2];
 };
 
 struct OnvifSession {
@@ -170,10 +171,7 @@ struct OnvifSession {
 LIBRARY_API void initializeSession(struct OnvifSession* onvif_session);
 LIBRARY_API void closeSession(struct OnvifSession* onvif_session);
 LIBRARY_API int broadcast(struct OnvifSession* onvif_session);
-LIBRARY_API bool prepareOnvifData(
-    int ordinal, struct OnvifSession* onvif_session,
-    struct OnvifData* onvif_data
-);
+LIBRARY_API bool prepareOnvifData(int ordinal, struct OnvifSession* onvif_session, struct OnvifData* onvif_data);
 LIBRARY_API int fillRTSPn(struct OnvifData* onvif_data, int profileIndex);
 #define fillRTSP(a) fillRTSPn(a, 0)
 LIBRARY_API void clearData(struct OnvifData* onvif_data);
@@ -192,12 +190,10 @@ LIBRARY_API int setNTP(struct OnvifData* onvif_data);
 LIBRARY_API int getHostname(struct OnvifData* onvif_data);
 LIBRARY_API int setHostname(struct OnvifData* onvif_data);
 
-LIBRARY_API int
-getVideoEncoderConfigurationOptions(struct OnvifData* onvif_data);
+LIBRARY_API int getVideoEncoderConfigurationOptions(struct OnvifData* onvif_data);
 LIBRARY_API int getVideoEncoderConfiguration(struct OnvifData* onvif_data);
 LIBRARY_API int setVideoEncoderConfiguration(struct OnvifData* onvif_data);
-LIBRARY_API int
-getAudioEncoderConfigurationOptions(struct OnvifData* onvif_data);
+LIBRARY_API int getAudioEncoderConfigurationOptions(struct OnvifData* onvif_data);
 LIBRARY_API int getAudioEncoderConfiguration(struct OnvifData* onvif_data);
 LIBRARY_API int setAudioEncoderConfiguration(struct OnvifData* onvif_data);
 
@@ -205,19 +201,18 @@ LIBRARY_API int getOptions(struct OnvifData* onvif_data);
 LIBRARY_API int getImagingSettings(struct OnvifData* onvif_data);
 LIBRARY_API int setImagingSettings(struct OnvifData* onvif_data);
 
-LIBRARY_API int
-continuousMove(float x, float y, float z, struct OnvifData* onvif_data);
+LIBRARY_API int getStatus(struct OnvifData* onvif_data);
+LIBRARY_API int absoluteMove(float x_position, float y_position, struct OnvifData* onvif_data);
+LIBRARY_API int continuousMove(float x, float y, float z, struct OnvifData* onvif_data);
 LIBRARY_API int moveStop(int type, struct OnvifData* onvif_data);
 LIBRARY_API int setPreset(char* arg, struct OnvifData* onvif_data);
 LIBRARY_API int gotoPreset(char* arg, struct OnvifData* onvif_data);
 
 LIBRARY_API int setUser(char* new_password, struct OnvifData* onvif_data);
 LIBRARY_API int setSystemDateAndTime(struct OnvifData* onvif_data);
-LIBRARY_API int
-setSystemDateAndTimeUsingTimezone(struct OnvifData* onvif_data);
+LIBRARY_API int setSystemDateAndTimeUsingTimezone(struct OnvifData* onvif_data);
 LIBRARY_API int getTimeOffset(struct OnvifData* onvif_data);
-LIBRARY_API int
-getProfileToken(struct OnvifData* onvif_data, int profileIndex);
+LIBRARY_API int getProfileToken(struct OnvifData* onvif_data, int profileIndex);
 #define getFirstProfileToken(a) getProfileToken(a, 0)
 LIBRARY_API int getStreamUri(struct OnvifData* onvif_data);
 LIBRARY_API int getSnapshotUri(struct OnvifData* onvif_data);
@@ -225,32 +220,21 @@ LIBRARY_API int getDeviceInformation(struct OnvifData* onvif_data);
 LIBRARY_API int rebootCamera(struct OnvifData* onvif_data);
 LIBRARY_API int hardReset(struct OnvifData* onvif_data);
 
-LIBRARY_API void
-saveSystemDateAndTime(char* filename, struct OnvifData* onvif_data);
+LIBRARY_API void saveSystemDateAndTime(char* filename, struct OnvifData* onvif_data);
 LIBRARY_API void saveScopes(char* filename, struct OnvifData* onvif_data);
-LIBRARY_API void
-saveDeviceInformation(char* filename, struct OnvifData* onvif_data);
-LIBRARY_API void
-saveCapabilities(char* filename, struct OnvifData* onvif_data);
+LIBRARY_API void saveDeviceInformation(char* filename, struct OnvifData* onvif_data);
+LIBRARY_API void saveCapabilities(char* filename, struct OnvifData* onvif_data);
 LIBRARY_API void saveProfiles(char* filename, struct OnvifData* onvif_data);
-LIBRARY_API void
-saveServiceCapabilities(char* filename, struct OnvifData* onvif_data);
+LIBRARY_API void saveServiceCapabilities(char* filename, struct OnvifData* onvif_data);
 
 LIBRARY_API int eventSubscribe(struct OnvifData* onvif_data);
 LIBRARY_API int eventRenew(struct OnvifData* onvif_data);
 
-LIBRARY_API void
-getDiscoveryXml(char buffer[], int buf_size, char uuid[47]);
+LIBRARY_API void getDiscoveryXml(char buffer[], int buf_size, char uuid[47]);
 LIBRARY_API void getDiscoveryXml2(char buffer[], int buf_size);
 LIBRARY_API void getScopeField(char*, char*, char[1024]);
-LIBRARY_API void getCameraName(
-    int ordinal, struct OnvifSession* onvif_session,
-    struct OnvifData* onvif_data
-);
-LIBRARY_API bool extractXAddrs(
-    int ordinal, struct OnvifSession* onvif_session,
-    struct OnvifData* onvif_data
-);
+LIBRARY_API void getCameraName(int ordinal, struct OnvifSession* onvif_session, struct OnvifData* onvif_data);
+LIBRARY_API bool extractXAddrs(int ordinal, struct OnvifSession* onvif_session, struct OnvifData* onvif_data);
 LIBRARY_API void extractOnvifService(char service[1024], bool post);
 LIBRARY_API void extractHost(char* xaddrs, char host[128]);
 
@@ -260,8 +244,7 @@ LIBRARY_API int mask2prefix(char* mask_buf);
 LIBRARY_API void getIPAddress(char buf[128]);
 LIBRARY_API void copyData(struct OnvifData* dts, struct OnvifData* src);
 LIBRARY_API bool hasPTZ(struct OnvifData* onvif_data);
-LIBRARY_API void
-getActiveNetworkInterfaces(struct OnvifSession* onvif_session);
+LIBRARY_API void getActiveNetworkInterfaces(struct OnvifSession* onvif_session);
 LIBRARY_API void dumpConfigAll(struct OnvifData* onvif_data);
 
 #ifdef __MINGW32__
