@@ -37,31 +37,34 @@ install(TARGETS onvif EXPORT LibOnvif
         INCLUDES DESTINATION include/onvif
 )
 install(DIRECTORY ${LIBONVIF_INCLUDE_DIR}/ DESTINATION ./include/onvif/)
-
 include(GenerateExportHeader)
 generate_export_header(onvif)
+export(
+  TARGETS onvif
+  NAMESPACE LibOnvif::
+  FILE LibOnvifTargets.cmake
+)
+install(EXPORT LibOnvif FILE LibOnvifTargets.cmake NAMESPACE LibOnvif:: DESTINATION lib/cmake/libonvif)
+
 include(CMakePackageConfigHelpers)
+configure_package_config_file(
+  LibOnvifConfig.cmake.in
+  "${CMAKE_CURRENT_BINARY_DIR}/cmake/LibOnvifConfig.cmake"
+  INSTALL_DESTINATION lib/cmake/libonvif)
+
 write_basic_package_version_file(
   "${CMAKE_CURRENT_BINARY_DIR}/cmake/LibOnvifConfigVersion.cmake"
   VERSION ${PROJECT_VERSION}
   COMPATIBILITY AnyNewerVersion)
 
-export(
-  EXPORT LibOnvif
-  FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/LibOnvifTargets.cmake"
-)
-configure_file(
-  LibOnvifConfig.cmake
-  "${CMAKE_CURRENT_BINARY_DIR}/cmake/LibOnvifConfig.cmake"
-  COPYONLY)
 
 set(ConfigPackageLocation lib/cmake/libonvif)
-install(
-  EXPORT LibOnvif
-  FILE LibOnvifTargets.cmake
-  DESTINATION ${ConfigPackageLocation})
+# install(
+#   EXPORT LibOnvif
+#   FILE LibOnvifTargets.cmake
+#   DESTINATION ${ConfigPackageLocation})
 install(
   FILES
-    LibOnvifConfig.cmake
+    "${CMAKE_CURRENT_BINARY_DIR}/cmake/LibOnvifConfig.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/cmake/LibOnvifConfigVersion.cmake"
   DESTINATION ${ConfigPackageLocation})
