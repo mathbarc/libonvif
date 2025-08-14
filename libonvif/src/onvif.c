@@ -55,36 +55,36 @@
 #include <errno.h>
 #include <stdint.h>
 
-#define INT_TO_ADDR(_addr)                                                     \
-    (_addr & 0xFF), (_addr >> 8 & 0xFF), (_addr >> 16 & 0xFF),                 \
+#define INT_TO_ADDR(_addr)                                     \
+    (_addr & 0xFF), (_addr >> 8 & 0xFF), (_addr >> 16 & 0xFF), \
         (_addr >> 24 & 0xFF)
 
-xmlDocPtr sendCommandToCamera(char *cmd, char *xaddrs);
-void getBase64(unsigned char *buffer, int chunk_size, unsigned char *result);
+xmlDocPtr sendCommandToCamera(char* cmd, char* xaddrs);
+void getBase64(unsigned char* buffer, int chunk_size, unsigned char* result);
 void getUUID(char uuid_buf[47]);
 void addUsernameDigestHeader(
-    xmlNodePtr root, xmlNsPtr ns_env, char *user, char *password, time_t offset
+    xmlNodePtr root, xmlNsPtr ns_env, char* user, char* password, time_t offset
 );
 void addHttpHeader(
-    xmlDocPtr doc, xmlNodePtr root, char *xaddrs, char *post_type, char cmd[],
+    xmlDocPtr doc, xmlNodePtr root, char* xaddrs, char* post_type, char cmd[],
     int cmd_length
 );
 int checkForXmlErrorMsg(xmlDocPtr doc, char error_msg[1024]);
-int getXmlValue(xmlDocPtr doc, xmlChar *xpath, char buf[], int buf_length);
+int getXmlValue(xmlDocPtr doc, xmlChar* xpath, char buf[], int buf_length);
 int getNodeAttributen(
-    xmlDocPtr doc, xmlChar *xpath, xmlChar *attribute, char buf[],
+    xmlDocPtr doc, xmlChar* xpath, xmlChar* attribute, char buf[],
     int buf_length, int profileIndex
 );
-#define getNodeAttribute(doc, xpath, attribute, buf, buf_length)               \
+#define getNodeAttribute(doc, xpath, attribute, buf, buf_length) \
     getNodeAttributen(doc, xpath, attribute, buf, buf_length, 0)
-xmlXPathObjectPtr getNodeSet(xmlDocPtr doc, xmlChar *xpath);
+xmlXPathObjectPtr getNodeSet(xmlDocPtr doc, xmlChar* xpath);
 
 const int SHA1_DIGEST_SIZE = 20;
 char preferred_network_address[16];
 static bool dump_reply = false;
 static void dumpReply(xmlDocPtr reply);
 
-int getNetworkInterfaces(struct OnvifData *onvif_data)
+int getNetworkInterfaces(struct OnvifData* onvif_data)
 {
     memset(onvif_data->ip_address_buf, 0, sizeof(onvif_data->ip_address_buf));
     memset(
@@ -119,124 +119,112 @@ int getNetworkInterfaces(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlChar *xpath =
-                BAD_CAST "//s:Body//tds:GetNetworkInterfacesResponse//"
-                         "tds:NetworkInterfaces";
-            xmlNodeSetPtr nodeset;
-            xmlChar *enabled = NULL;
-            xmlXPathObjectPtr xml_result = getNodeSet(reply, xpath);
-            xmlDocPtr temp_doc = xmlNewDoc(BAD_CAST "1.0");
-            if (xml_result)
-                {
-                    nodeset = xml_result->nodesetval;
-                    for (int i = 0; i < nodeset->nodeNr; i++)
-                        {
-                            xmlNodePtr cur = nodeset->nodeTab[i];
-                            xmlChar *token = xmlGetProp(cur, BAD_CAST "token");
-                            xmlDocSetRootElement(temp_doc, cur);
+    if (reply != NULL) {
+        xmlChar* xpath = BAD_CAST "//s:Body//tds:GetNetworkInterfacesResponse//"
+                                  "tds:NetworkInterfaces";
+        xmlNodeSetPtr nodeset;
+        xmlChar* enabled = NULL;
+        xmlXPathObjectPtr xml_result = getNodeSet(reply, xpath);
+        xmlDocPtr temp_doc = xmlNewDoc(BAD_CAST "1.0");
+        if (xml_result) {
+            nodeset = xml_result->nodesetval;
+            for (int i = 0; i < nodeset->nodeNr; i++) {
+                xmlNodePtr cur = nodeset->nodeTab[i];
+                xmlChar* token = xmlGetProp(cur, BAD_CAST "token");
+                xmlDocSetRootElement(temp_doc, cur);
 
-                            bool dhcp = false;
-                            char isDHCP[128] = { 0 };
-                            xpath = BAD_CAST "//tds:NetworkInterfaces//tt:IPv4/"
-                                             "/tt:Config//tt:DHCP";
-                            if (getXmlValue(temp_doc, xpath, isDHCP, 128) == 0)
-                                {
-                                    if (strcmp(isDHCP, "true") == 0)
-                                        {
-                                            dhcp = true;
-                                        }
-                                    onvif_data->dhcp_enabled = dhcp;
-                                }
-
-                            xmlChar *xpath_address;
-                            xmlChar *xpath_prefix;
-                            if (dhcp)
-                                {
-                                    xpath_address = BAD_CAST
-                                        "//tds:NetworkInterfaces//tt:IPv4//"
-                                        "tt:Config//tt:FromDHCP//tt:Address";
-                                    xpath_prefix =
-                                        BAD_CAST "//tds:NetworkInterfaces//"
-                                                 "tt:IPv4//tt:Config//"
-                                                 "tt:FromDHCP//tt:PrefixLength";
-                                }
-                            else
-                                {
-                                    xpath_address = BAD_CAST
-                                        "//tds:NetworkInterfaces//tt:IPv4//"
-                                        "tt:Config//tt:Manual//tt:Address";
-                                    xpath_prefix = BAD_CAST
-                                        "//tds:NetworkInterfaces//tt:IPv4//"
-                                        "tt:Config//tt:Manual//tt:PrefixLength";
-                                }
-
-                            char ip_address_buf[128] = { 0 };
-                            if (getXmlValue(
-                                    temp_doc, xpath_address, ip_address_buf, 128
-                                ) == 0)
-                                {
-                                    char host[128] = { 0 };
-                                    extractHost(onvif_data->xaddrs, host);
-
-                                    if (strcmp(ip_address_buf, host) == 0)
-                                        {
-                                            strcpy(
-                                                onvif_data->ip_address_buf,
-                                                ip_address_buf
-                                            );
-                                            strcpy(
-                                                onvif_data
-                                                    ->networkInterfaceToken,
-                                                (char *)token
-                                            );
-                                            char prefix_length_buf[128];
-                                            if (getXmlValue(
-                                                    temp_doc, xpath_prefix,
-                                                    prefix_length_buf, 128
-                                                ) == 0)
-                                                {
-                                                    onvif_data->prefix_length =
-                                                        atoi(prefix_length_buf);
-                                                }
-                                            xpath = BAD_CAST
-                                                "//tds:NetworkInterfaces//"
-                                                "tt:Info//tt:Name";
-                                            getXmlValue(
-                                                temp_doc, xpath,
-                                                onvif_data
-                                                    ->networkInterfaceName,
-                                                128
-                                            );
-                                            i = nodeset->nodeNr;
-                                        }
-                                }
-
-                            xmlFree(token);
-                        }
-                    xmlXPathFreeObject(xml_result);
+                bool dhcp = false;
+                char isDHCP[128] = { 0 };
+                xpath = BAD_CAST "//tds:NetworkInterfaces//tt:IPv4/"
+                                 "/tt:Config//tt:DHCP";
+                if (getXmlValue(temp_doc, xpath, isDHCP, 128) == 0) {
+                    if (strcmp(isDHCP, "true") == 0) {
+                        dhcp = true;
+                    }
+                    onvif_data->dhcp_enabled = dhcp;
                 }
-            xmlFreeDoc(temp_doc);
-            if (enabled != NULL) { xmlFree(enabled); }
 
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(onvif_data->last_error, " getNetworkInterfaces");
-            xmlFreeDoc(reply);
+                xmlChar* xpath_address;
+                xmlChar* xpath_prefix;
+                if (dhcp) {
+                    xpath_address = BAD_CAST
+                        "//tds:NetworkInterfaces//tt:IPv4//"
+                        "tt:Config//tt:FromDHCP//tt:Address";
+                    xpath_prefix = BAD_CAST "//tds:NetworkInterfaces//"
+                                            "tt:IPv4//tt:Config//"
+                                            "tt:FromDHCP//tt:PrefixLength";
+                } else {
+                    xpath_address = BAD_CAST
+                        "//tds:NetworkInterfaces//tt:IPv4//"
+                        "tt:Config//tt:Manual//tt:Address";
+                    xpath_prefix = BAD_CAST
+                        "//tds:NetworkInterfaces//tt:IPv4//"
+                        "tt:Config//tt:Manual//tt:PrefixLength";
+                }
+
+                char ip_address_buf[128] = { 0 };
+                if (getXmlValue(
+                        temp_doc, xpath_address, ip_address_buf, 128
+                    )
+                    == 0) {
+                    char host[128] = { 0 };
+                    extractHost(onvif_data->xaddrs, host);
+
+                    if (strcmp(ip_address_buf, host) == 0) {
+                        strcpy(
+                            onvif_data->ip_address_buf,
+                            ip_address_buf
+                        );
+                        strcpy(
+                            onvif_data
+                                ->networkInterfaceToken,
+                            (char*)token
+                        );
+                        char prefix_length_buf[128];
+                        if (getXmlValue(
+                                temp_doc, xpath_prefix,
+                                prefix_length_buf, 128
+                            )
+                            == 0) {
+                            onvif_data->prefix_length = atoi(prefix_length_buf);
+                        }
+                        xpath = BAD_CAST
+                            "//tds:NetworkInterfaces//"
+                            "tt:Info//tt:Name";
+                        getXmlValue(
+                            temp_doc, xpath,
+                            onvif_data
+                                ->networkInterfaceName,
+                            128
+                        );
+                        i = nodeset->nodeNr;
+                    }
+                }
+
+                xmlFree(token);
+            }
+            xmlXPathFreeObject(xml_result);
         }
-    else
-        {
-            result = -1;
-            strcpy(
-                onvif_data->last_error, "getNetworkInterfaces - No XML reply"
-            );
+        xmlFreeDoc(temp_doc);
+        if (enabled != NULL) {
+            xmlFree(enabled);
         }
+
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getNetworkInterfaces");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(
+            onvif_data->last_error, "getNetworkInterfaces - No XML reply"
+        );
+    }
     return result;
     return 0;
 }
 
-int setNetworkInterfaces(struct OnvifData *onvif_data)
+int setNetworkInterfaces(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -259,8 +247,7 @@ int setNetworkInterfaces(struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr setNetworkInterfaces =
-        xmlNewTextChild(body, ns_tds, BAD_CAST "SetNetworkInterfaces", NULL);
+    xmlNodePtr setNetworkInterfaces = xmlNewTextChild(body, ns_tds, BAD_CAST "SetNetworkInterfaces", NULL);
     xmlNewTextChild(
         setNetworkInterfaces, ns_tt, BAD_CAST "InterfaceToken",
         BAD_CAST onvif_data->networkInterfaceName
@@ -268,62 +255,52 @@ int setNetworkInterfaces(struct OnvifData *onvif_data)
     xmlNodePtr networkInterface = xmlNewTextChild(
         setNetworkInterfaces, ns_tt, BAD_CAST "NetworkInterface", NULL
     );
-    xmlNodePtr ipv4 =
-        xmlNewTextChild(networkInterface, ns_tt, BAD_CAST "IPv4", NULL);
-    if (onvif_data->dhcp_enabled)
-        {
-            xmlNewTextChild(ipv4, ns_tt, BAD_CAST "DHCP", BAD_CAST "true");
-        }
-    else
-        {
-            xmlNewTextChild(ipv4, ns_tt, BAD_CAST "DHCP", BAD_CAST "false");
-            xmlNodePtr manual =
-                xmlNewTextChild(ipv4, ns_tt, BAD_CAST "Manual", NULL);
-            xmlNewTextChild(
-                manual, ns_tt, BAD_CAST "Address",
-                BAD_CAST onvif_data->ip_address_buf
-            );
-            char prefix_length_buf[128];
-            sprintf(prefix_length_buf, "%d", onvif_data->prefix_length);
-            xmlNewTextChild(
-                manual, ns_tt, BAD_CAST "PrefixLength",
-                BAD_CAST prefix_length_buf
-            );
-        }
+    xmlNodePtr ipv4 = xmlNewTextChild(networkInterface, ns_tt, BAD_CAST "IPv4", NULL);
+    if (onvif_data->dhcp_enabled) {
+        xmlNewTextChild(ipv4, ns_tt, BAD_CAST "DHCP", BAD_CAST "true");
+    } else {
+        xmlNewTextChild(ipv4, ns_tt, BAD_CAST "DHCP", BAD_CAST "false");
+        xmlNodePtr manual = xmlNewTextChild(ipv4, ns_tt, BAD_CAST "Manual", NULL);
+        xmlNewTextChild(
+            manual, ns_tt, BAD_CAST "Address",
+            BAD_CAST onvif_data->ip_address_buf
+        );
+        char prefix_length_buf[128];
+        sprintf(prefix_length_buf, "%d", onvif_data->prefix_length);
+        xmlNewTextChild(
+            manual, ns_tt, BAD_CAST "PrefixLength",
+            BAD_CAST prefix_length_buf
+        );
+    }
     char cmd[4096] = { 0 };
     addHttpHeader(
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlChar *xpath = BAD_CAST
-                "//s:Body//tds:SetNetworkInterfacesResponse//tds:RebootNeeded";
-            char rebootNeeded[128];
-            if (getXmlValue(reply, xpath, rebootNeeded, 128) == 0)
-                {
-                    if (strcmp(rebootNeeded, "true") == 0)
-                        {
-                            rebootCamera(onvif_data);
-                        }
-                }
+    if (reply != NULL) {
+        xmlChar* xpath = BAD_CAST
+            "//s:Body//tds:SetNetworkInterfacesResponse//tds:RebootNeeded";
+        char rebootNeeded[128];
+        if (getXmlValue(reply, xpath, rebootNeeded, 128) == 0) {
+            if (strcmp(rebootNeeded, "true") == 0) {
+                rebootCamera(onvif_data);
+            }
+        }
 
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(onvif_data->last_error, " setNetworkInterfaces");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(
-                onvif_data->last_error, "setNetworkInterfaces - No XML reply"
-            );
-        }
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " setNetworkInterfaces");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(
+            onvif_data->last_error, "setNetworkInterfaces - No XML reply"
+        );
+    }
     return result;
 }
 
-int getNetworkDefaultGateway(struct OnvifData *onvif_data)
+int getNetworkDefaultGateway(struct OnvifData* onvif_data)
 {
     memset(
         onvif_data->default_gateway_buf, 0,
@@ -353,29 +330,25 @@ int getNetworkDefaultGateway(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlChar *xpath =
-                BAD_CAST "//s:Body//tds:GetNetworkDefaultGatewayResponse//"
-                         "tds:NetworkGateway//tt:IPv4Address";
-            getXmlValue(reply, xpath, onvif_data->default_gateway_buf, 128);
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(onvif_data->last_error, " getNetworkDefaultGateway");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(
-                onvif_data->last_error,
-                "getNetworkDefaultGateway - No XML reply"
-            );
-        }
+    if (reply != NULL) {
+        xmlChar* xpath = BAD_CAST "//s:Body//tds:GetNetworkDefaultGatewayResponse//"
+                                  "tds:NetworkGateway//tt:IPv4Address";
+        getXmlValue(reply, xpath, onvif_data->default_gateway_buf, 128);
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getNetworkDefaultGateway");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(
+            onvif_data->last_error,
+            "getNetworkDefaultGateway - No XML reply"
+        );
+    }
     return result;
 }
 
-int setNetworkDefaultGateway(struct OnvifData *onvif_data)
+int setNetworkDefaultGateway(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -410,25 +383,22 @@ int setNetworkDefaultGateway(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(onvif_data->last_error, " setNetworkDefaultGateway");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(
-                onvif_data->last_error,
-                "setNetworkDefaultGateway - No XML reply"
-            );
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " setNetworkDefaultGateway");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(
+            onvif_data->last_error,
+            "setNetworkDefaultGateway - No XML reply"
+        );
+    }
     return result;
 }
 
-int getDNS(struct OnvifData *onvif_data)
+int getDNS(struct OnvifData* onvif_data)
 {
     memset(onvif_data->dns_buf, 0, sizeof(onvif_data->dns_buf));
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
@@ -455,60 +425,58 @@ int getDNS(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlChar *xpath = BAD_CAST
-                "//s:Body//tds:GetDNSResponse//tds:DNSInformation//tt:FromDHCP";
-            char fromDHCP[128];
-            if (getXmlValue(reply, xpath, fromDHCP, 128) == 0)
-                {
-                    if (strcmp(fromDHCP, "true") == 0)
-                        {
-                            xpath = BAD_CAST "//s:Body//tds:GetDNSResponse//"
-                                             "tds:DNSInformation//"
-                                             "tt:DNSFromDHCP//tt:IPv4Address";
-                            if (getXmlValue(
-                                    reply, xpath, onvif_data->dns_buf, 128
-                                ) == 0)
-                                {
-                                }
-                        }
-                    else
-                        {
-                            xpath = BAD_CAST "//s:Body//tds:GetDNSResponse//"
-                                             "tds:DNSInformation//tt:DNSManual/"
-                                             "/tt:IPv4Address";
-                            if (getXmlValue(
-                                    reply, xpath, onvif_data->dns_buf, 128
-                                ) == 0)
-                                {
-                                }
-                        }
+    if (reply != NULL) {
+        xmlChar* xpath = BAD_CAST
+            "//s:Body//tds:GetDNSResponse//tds:DNSInformation//tt:FromDHCP";
+        char fromDHCP[128];
+        if (getXmlValue(reply, xpath, fromDHCP, 128) == 0) {
+            if (strcmp(fromDHCP, "true") == 0) {
+                xpath = BAD_CAST "//s:Body//tds:GetDNSResponse//"
+                                 "tds:DNSInformation//"
+                                 "tt:DNSFromDHCP//tt:IPv4Address";
+                if (getXmlValue(
+                        reply, xpath, onvif_data->dns_buf, 128
+                    )
+                    == 0) {
                 }
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " getDNS");
-            xmlFreeDoc(reply);
+            } else {
+                xpath = BAD_CAST "//s:Body//tds:GetDNSResponse//"
+                                 "tds:DNSInformation//tt:DNSManual/"
+                                 "/tt:IPv4Address";
+                if (getXmlValue(
+                        reply, xpath, onvif_data->dns_buf, 128
+                    )
+                    == 0) {
+                }
+            }
         }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "getDNS - No XML reply");
-        }
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getDNS");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "getDNS - No XML reply");
+    }
     return result;
 }
 
-int setDNS(struct OnvifData *onvif_data)
+int setDNS(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
 
     char fromDHCP_buf[128];
-    if (onvif_data->dhcp_enabled) { strcpy(fromDHCP_buf, "true"); }
-    else { strcpy(fromDHCP_buf, "false"); }
+    if (onvif_data->dhcp_enabled) {
+        strcpy(fromDHCP_buf, "true");
+    } else {
+        strcpy(fromDHCP_buf, "false");
+    }
 
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
-    if (result < 0) strcat(onvif_data->last_error, " setDNS");
+    if (result < 0)
+        strcat(onvif_data->last_error, " setDNS");
 
     xmlDocSetRootElement(doc, root);
     xmlNsPtr ns_env = xmlNewNs(
@@ -528,42 +496,36 @@ int setDNS(struct OnvifData *onvif_data)
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
     xmlNodePtr setDNS = xmlNewTextChild(body, ns_tds, BAD_CAST "SetDNS", NULL);
-    if (!onvif_data->dhcp_enabled)
-        {
-            xmlNodePtr dnsManual =
-                xmlNewTextChild(setDNS, ns_tds, BAD_CAST "DNSManual", NULL);
-            xmlNewTextChild(dnsManual, ns_tt, BAD_CAST "Type", BAD_CAST "IPv4");
-            xmlNewTextChild(
-                dnsManual, ns_tt, BAD_CAST "IPv4Address",
-                BAD_CAST onvif_data->dns_buf
-            );
-        }
-    else
-        {
-            xmlNewTextChild(
-                setDNS, ns_tds, BAD_CAST "FromDHCP", BAD_CAST fromDHCP_buf
-            );
-        }
+    if (!onvif_data->dhcp_enabled) {
+        xmlNodePtr dnsManual = xmlNewTextChild(setDNS, ns_tds, BAD_CAST "DNSManual", NULL);
+        xmlNewTextChild(dnsManual, ns_tt, BAD_CAST "Type", BAD_CAST "IPv4");
+        xmlNewTextChild(
+            dnsManual, ns_tt, BAD_CAST "IPv4Address",
+            BAD_CAST onvif_data->dns_buf
+        );
+    } else {
+        xmlNewTextChild(
+            setDNS, ns_tds, BAD_CAST "FromDHCP", BAD_CAST fromDHCP_buf
+        );
+    }
     char cmd[4096] = { 0 };
     addHttpHeader(
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " setDNS");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "setDNS - No XML reply");
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " setDNS");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "setDNS - No XML reply");
+    }
     return result;
 }
 
-int getNTP(struct OnvifData *onvif_data)
+int getNTP(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -589,66 +551,63 @@ int getNTP(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlChar *xpath =
-                BAD_CAST "//s:Body//tds:GetNTPResponse//tt:FromDHCP";
-            char ntp_buf[128];
-            getXmlValue(reply, xpath, ntp_buf, 128);
-            if (strcmp(ntp_buf, "true") == 0)
-                {
-                    onvif_data->ntp_dhcp = true;
-                    xpath = BAD_CAST
-                        "//s:Body//tds:GetNTPResponse//tt:NTPFromDHCP//tt:Type";
-                    getXmlValue(reply, xpath, onvif_data->ntp_type, 128);
-                    if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
-                        xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
-                                         "tt:NTPFromDHCP//tt:IPv4Address";
-                    else if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
-                        xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
-                                         "tt:NTPFromDHCP//tt:IPv6Address";
-                    else
-                        xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
-                                         "tt:NTPFromDHCP//tt:DNSname";
-                    getXmlValue(reply, xpath, onvif_data->ntp_addr, 128);
-                }
+    if (reply != NULL) {
+        xmlChar* xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//tt:FromDHCP";
+        char ntp_buf[128];
+        getXmlValue(reply, xpath, ntp_buf, 128);
+        if (strcmp(ntp_buf, "true") == 0) {
+            onvif_data->ntp_dhcp = true;
+            xpath = BAD_CAST
+                "//s:Body//tds:GetNTPResponse//tt:NTPFromDHCP//tt:Type";
+            getXmlValue(reply, xpath, onvif_data->ntp_type, 128);
+            if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
+                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
+                                 "tt:NTPFromDHCP//tt:IPv4Address";
+            else if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
+                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
+                                 "tt:NTPFromDHCP//tt:IPv6Address";
             else
-                {
-                    onvif_data->ntp_dhcp = false;
-                    xpath = BAD_CAST
-                        "//s:Body//tds:GetNTPResponse//tt:NTPManual//tt:Type";
-                    getXmlValue(reply, xpath, onvif_data->ntp_type, 128);
-                    if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
-                        xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
-                                         "tt:NTPManual//tt:IPv4Address";
-                    else if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
-                        xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
-                                         "tt:NTPManual//tt:IPv6Address";
-                    else
-                        xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
-                                         "tt:NTPManual//tt:DNSname";
-                    getXmlValue(reply, xpath, onvif_data->ntp_addr, 128);
-                }
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " getNTP");
+                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
+                                 "tt:NTPFromDHCP//tt:DNSname";
+            getXmlValue(reply, xpath, onvif_data->ntp_addr, 128);
+        } else {
+            onvif_data->ntp_dhcp = false;
+            xpath = BAD_CAST
+                "//s:Body//tds:GetNTPResponse//tt:NTPManual//tt:Type";
+            getXmlValue(reply, xpath, onvif_data->ntp_type, 128);
+            if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
+                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
+                                 "tt:NTPManual//tt:IPv4Address";
+            else if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
+                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
+                                 "tt:NTPManual//tt:IPv6Address";
+            else
+                xpath = BAD_CAST "//s:Body//tds:GetNTPResponse//"
+                                 "tt:NTPManual//tt:DNSname";
+            getXmlValue(reply, xpath, onvif_data->ntp_addr, 128);
         }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "getNTP - No XML reply");
-        }
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getNTP");
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "getNTP - No XML reply");
+    }
     return result;
 }
 
-int setNTP(struct OnvifData *onvif_data)
+int setNTP(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
 
     char fromDHCP_buf[128];
     memset(fromDHCP_buf, 0, sizeof(fromDHCP_buf));
-    if (onvif_data->ntp_dhcp) { strcpy(fromDHCP_buf, "true"); }
-    else { strcpy(fromDHCP_buf, "false"); }
+    if (onvif_data->ntp_dhcp) {
+        strcpy(fromDHCP_buf, "true");
+    } else {
+        strcpy(fromDHCP_buf, "false");
+    }
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
     xmlDocSetRootElement(doc, root);
@@ -671,37 +630,35 @@ int setNTP(struct OnvifData *onvif_data)
     xmlNodePtr setNTP = xmlNewTextChild(body, ns_tds, BAD_CAST "SetNTP", NULL);
 
     xmlNewTextChild(setNTP, ns_tds, BAD_CAST "FromDHCP", BAD_CAST fromDHCP_buf);
-    if (!onvif_data->ntp_dhcp)
-        {
-            xmlNodePtr ntpManual =
-                xmlNewTextChild(setNTP, ns_tds, BAD_CAST "NTPManual", NULL);
-            // xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "Type", BAD_CAST
-            // "IPv4"); xmlNewTextChild(ntpManual, ns_tt, BAD_CAST
-            // "IPv4Address", BAD_CAST "10.1.1.16");
+    if (!onvif_data->ntp_dhcp) {
+        xmlNodePtr ntpManual = xmlNewTextChild(setNTP, ns_tds, BAD_CAST "NTPManual", NULL);
+        // xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "Type", BAD_CAST
+        // "IPv4"); xmlNewTextChild(ntpManual, ns_tt, BAD_CAST
+        // "IPv4Address", BAD_CAST "10.1.1.16");
 
-            // xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "Type", BAD_CAST
-            // "DNS"); xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "DNSname",
-            // BAD_CAST "time.windows.com");
+        // xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "Type", BAD_CAST
+        // "DNS"); xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "DNSname",
+        // BAD_CAST "time.windows.com");
 
-            /**/
+        /**/
+        xmlNewTextChild(
+            ntpManual, ns_tt, BAD_CAST "Type", BAD_CAST onvif_data->ntp_type
+        );
+        if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
             xmlNewTextChild(
-                ntpManual, ns_tt, BAD_CAST "Type", BAD_CAST onvif_data->ntp_type
+                ntpManual, ns_tt, BAD_CAST "IPv4Address",
+                BAD_CAST onvif_data->ntp_addr
             );
-            if (strcmp(onvif_data->ntp_type, "IPv4") == 0)
-                xmlNewTextChild(
-                    ntpManual, ns_tt, BAD_CAST "IPv4Address",
-                    BAD_CAST onvif_data->ntp_addr
-                );
-            // else if (strcmp(onvif_data->ntp_type,"IPv6") == 0)
-            //	xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "IPv6Address",
-            // BAD_CAST onvif_data->ntp_addr);
-            else
-                xmlNewTextChild(
-                    ntpManual, ns_tt, BAD_CAST "DNSname",
-                    BAD_CAST onvif_data->ntp_addr
-                );
-            /**/
-        }
+        // else if (strcmp(onvif_data->ntp_type,"IPv6") == 0)
+        //	xmlNewTextChild(ntpManual, ns_tt, BAD_CAST "IPv6Address",
+        // BAD_CAST onvif_data->ntp_addr);
+        else
+            xmlNewTextChild(
+                ntpManual, ns_tt, BAD_CAST "DNSname",
+                BAD_CAST onvif_data->ntp_addr
+            );
+        /**/
+    }
     // dumpReply(doc);
 
     char cmd[4096] = { 0 };
@@ -709,21 +666,19 @@ int setNTP(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " setNTP");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "setNTP - No XML reply");
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " setNTP");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "setNTP - No XML reply");
+    }
     return result;
 }
 
-int getHostname(struct OnvifData *onvif_data)
+int getHostname(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -749,26 +704,24 @@ int getHostname(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlChar *xpath = BAD_CAST "//s:Body//tds:GetHostnameResponse//"
-                                      "tds:HostnameInformation//tt:FromDHCP";
-            xpath = BAD_CAST "//s:Body//tds:GetHostnameResponse//"
-                             "tds:HostnameInformation//tt:Name";
-            getXmlValue(reply, xpath, onvif_data->host_name, 128);
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " getHostname");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "getHostname - No XML reply");
-        }
+    if (reply != NULL) {
+        xmlChar* xpath = BAD_CAST "//s:Body//tds:GetHostnameResponse//"
+                                  "tds:HostnameInformation//tt:FromDHCP";
+        xpath = BAD_CAST "//s:Body//tds:GetHostnameResponse//"
+                         "tds:HostnameInformation//tt:Name";
+        getXmlValue(reply, xpath, onvif_data->host_name, 128);
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getHostname");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "getHostname - No XML reply");
+    }
     return result;
 }
 
-int setHostname(struct OnvifData *onvif_data)
+int setHostname(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -792,47 +745,41 @@ int setHostname(struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    if (onvif_data->host_name[0])
-        {
-            xmlNodePtr setHostname =
-                xmlNewTextChild(body, ns_tds, BAD_CAST "SetHostname", NULL);
-            xmlNewTextChild(
-                setHostname, ns_tds, BAD_CAST "Name",
-                BAD_CAST onvif_data->host_name
-            );
-            /* Do I also need to set FromDHCP to false ? */
-        }
-    else
-        {
-            xmlNodePtr setHostname = xmlNewTextChild(
-                body, ns_tds, BAD_CAST "SetHostnameFromDHCP", NULL
-            );
-            xmlNewTextChild(
-                setHostname, ns_tds, BAD_CAST "FromDHCP", BAD_CAST "true"
-            );
-        }
+    if (onvif_data->host_name[0]) {
+        xmlNodePtr setHostname = xmlNewTextChild(body, ns_tds, BAD_CAST "SetHostname", NULL);
+        xmlNewTextChild(
+            setHostname, ns_tds, BAD_CAST "Name",
+            BAD_CAST onvif_data->host_name
+        );
+        /* Do I also need to set FromDHCP to false ? */
+    } else {
+        xmlNodePtr setHostname = xmlNewTextChild(
+            body, ns_tds, BAD_CAST "SetHostnameFromDHCP", NULL
+        );
+        xmlNewTextChild(
+            setHostname, ns_tds, BAD_CAST "FromDHCP", BAD_CAST "true"
+        );
+    }
 
     char cmd[4096] = { 0 };
     addHttpHeader(
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            /* Should check for RebootNeeded=true from setHostnameFronDHCP */
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " setHostname");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "setHostname - No XML reply");
-        }
+    if (reply != NULL) {
+        /* Should check for RebootNeeded=true from setHostnameFronDHCP */
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " setHostname");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "setHostname - No XML reply");
+    }
     return result;
 }
 
-int getCapabilities(struct OnvifData *onvif_data)
+int getCapabilities(struct OnvifData* onvif_data)
 {
     memset(onvif_data->device_service, 0, sizeof(onvif_data->device_service));
     memset(onvif_data->event_service, 0, sizeof(onvif_data->event_service));
@@ -857,8 +804,7 @@ int getCapabilities(struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr capabilities =
-        xmlNewTextChild(body, ns_tds, BAD_CAST "GetCapabilities", NULL);
+    xmlNodePtr capabilities = xmlNewTextChild(body, ns_tds, BAD_CAST "GetCapabilities", NULL);
     xmlNewTextChild(capabilities, ns_tds, BAD_CAST "Category", BAD_CAST "All");
     char cmd[4096] = { 0 };
 
@@ -869,54 +815,50 @@ int getCapabilities(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlChar *xpath;
+    if (reply != NULL) {
+        xmlChar* xpath;
 
-            xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//"
-                             "tds:Capabilities//tt:Events//tt:XAddr";
-            if (getXmlValue(reply, xpath, onvif_data->event_service, 1024) == 0)
-                extractOnvifService(onvif_data->event_service, true);
+        xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//"
+                         "tds:Capabilities//tt:Events//tt:XAddr";
+        if (getXmlValue(reply, xpath, onvif_data->event_service, 1024) == 0)
+            extractOnvifService(onvif_data->event_service, true);
 
-            xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//"
-                             "tds:Capabilities//tt:Imaging//tt:XAddr";
-            if (getXmlValue(reply, xpath, onvif_data->imaging_service, 1024) ==
-                0)
-                extractOnvifService(onvif_data->imaging_service, true);
+        xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//"
+                         "tds:Capabilities//tt:Imaging//tt:XAddr";
+        if (getXmlValue(reply, xpath, onvif_data->imaging_service, 1024) == 0)
+            extractOnvifService(onvif_data->imaging_service, true);
 
-            xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//"
-                             "tds:Capabilities//tt:Media//tt:XAddr";
-            if (getXmlValue(reply, xpath, onvif_data->media_service, 1024) == 0)
-                extractOnvifService(onvif_data->media_service, true);
+        xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//"
+                         "tds:Capabilities//tt:Media//tt:XAddr";
+        if (getXmlValue(reply, xpath, onvif_data->media_service, 1024) == 0)
+            extractOnvifService(onvif_data->media_service, true);
 
-            xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//"
-                             "tds:Capabilities//tt:PTZ//tt:XAddr";
-            if (getXmlValue(reply, xpath, onvif_data->ptz_service, 1024) == 0)
-                extractOnvifService(onvif_data->ptz_service, true);
+        xpath = BAD_CAST "//s:Body//tds:GetCapabilitiesResponse//"
+                         "tds:Capabilities//tt:PTZ//tt:XAddr";
+        if (getXmlValue(reply, xpath, onvif_data->ptz_service, 1024) == 0)
+            extractOnvifService(onvif_data->ptz_service, true);
 
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " getCapabilities");
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getCapabilities");
 
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "getCapabilities - No XML reply");
-        }
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "getCapabilities - No XML reply");
+    }
     return result;
 }
 
-int getVideoEncoderConfigurationOptions(struct OnvifData *onvif_data)
+int getVideoEncoderConfigurationOptions(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
-    for (int i = 0; i < 16; i++)
-        {
-            memset(
-                onvif_data->resolutions_buf[i], 0,
-                sizeof(onvif_data->resolutions_buf[i])
-            );
-        }
+    for (int i = 0; i < 16; i++) {
+        memset(
+            onvif_data->resolutions_buf[i], 0,
+            sizeof(onvif_data->resolutions_buf[i])
+        );
+    }
     int result = 0;
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
@@ -953,150 +895,141 @@ int getVideoEncoderConfigurationOptions(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlChar *width = NULL;
-            xmlChar *height = NULL;
-            xmlChar *xpath = BAD_CAST
-                "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-                "trt:Options//tt:H264//tt:ResolutionsAvailable";
-            xmlNodeSetPtr nodeset;
-            xmlXPathObjectPtr xml_result = getNodeSet(reply, xpath);
-            int k = 0;
-            if (xml_result)
-                {
-                    nodeset = xml_result->nodesetval;
-                    for (int i = 0; i < nodeset->nodeNr; i++)
-                        {
-                            xmlNodePtr cur = nodeset->nodeTab[i]->children;
-                            while (cur != NULL)
-                                {
-                                    if ((!xmlStrcmp(
-                                            cur->name, (const xmlChar *)"Width"
-                                        )))
-                                        {
-                                            width = xmlNodeListGetString(
-                                                reply, cur->xmlChildrenNode, 1
-                                            );
-                                        }
-                                    else if ((!xmlStrcmp(
-                                                 cur->name,
-                                                 (const xmlChar *)"Height"
-                                             )))
-                                        {
-                                            height = xmlNodeListGetString(
-                                                reply, cur->xmlChildrenNode, 1
-                                            );
-                                        }
-                                    cur = cur->next;
-                                }
-                            char tmp[128] = { 0 };
-                            if ((strlen((char *)width) + strlen((char *)height)
-                                ) > 124)
-                                {
-                                    fprintf(
-                                        stderr,
-                                        "xmlNodeListString return buffer "
-                                        "overflow %zu\n",
-                                        strlen((char *)width) +
-                                            strlen((char *)height)
-                                    );
-                                }
-                            else { sprintf(tmp, "%s x %s", width, height); }
-
-                            int size = 0;
-                            bool found_size = false;
-                            while (!found_size)
-                                {
-                                    if (strlen(onvif_data->resolutions_buf[size]
-                                        ) == 0)
-                                        {
-                                            found_size = true;
-                                        }
-                                    else
-                                        {
-                                            size++;
-                                            if (size > 15) found_size = true;
-                                        }
-                                }
-                            bool duplicate = false;
-                            for (int n = 0; n < size; n++)
-                                {
-                                    if (strcmp(
-                                            onvif_data->resolutions_buf[n], tmp
-                                        ) == 0)
-                                        {
-                                            duplicate = true;
-                                        }
-                                }
-                            if (!duplicate)
-                                {
-                                    strcpy(
-                                        onvif_data->resolutions_buf[size], tmp
-                                    );
-                                    k++;
-                                }
-
-                            if (width != NULL) xmlFree(width);
-                            if (height != NULL) xmlFree(height);
-                        }
-                    xmlXPathFreeObject(xml_result);
+    if (reply != NULL) {
+        xmlChar* width = NULL;
+        xmlChar* height = NULL;
+        xmlChar* xpath = BAD_CAST
+            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
+            "trt:Options//tt:H264//tt:ResolutionsAvailable";
+        xmlNodeSetPtr nodeset;
+        xmlXPathObjectPtr xml_result = getNodeSet(reply, xpath);
+        int k = 0;
+        if (xml_result) {
+            nodeset = xml_result->nodesetval;
+            for (int i = 0; i < nodeset->nodeNr; i++) {
+                xmlNodePtr cur = nodeset->nodeTab[i]->children;
+                while (cur != NULL) {
+                    if ((!xmlStrcmp(
+                            cur->name, (const xmlChar*)"Width"
+                        ))) {
+                        width = xmlNodeListGetString(
+                            reply, cur->xmlChildrenNode, 1
+                        );
+                    } else if ((!xmlStrcmp(
+                                   cur->name,
+                                   (const xmlChar*)"Height"
+                               ))) {
+                        height = xmlNodeListGetString(
+                            reply, cur->xmlChildrenNode, 1
+                        );
+                    }
+                    cur = cur->next;
+                }
+                char tmp[128] = { 0 };
+                if ((strlen((char*)width) + strlen((char*)height)
+                    )
+                    > 124) {
+                    fprintf(
+                        stderr,
+                        "xmlNodeListString return buffer "
+                        "overflow %zu\n",
+                        strlen((char*)width) + strlen((char*)height)
+                    );
+                } else {
+                    sprintf(tmp, "%s x %s", width, height);
                 }
 
-            char temp_buf[128];
-            xpath = BAD_CAST
-                "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-                "trt:Options//tt:H264//tt:GovLengthRange//tt:Min";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->gov_length_min = atoi(temp_buf);
-            xpath = BAD_CAST
-                "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-                "trt:Options//tt:H264//tt:GovLengthRange//tt:Max";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->gov_length_max = atoi(temp_buf);
-            xpath = BAD_CAST
-                "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-                "trt:Options//tt:H264//tt:FrameRateRange//tt:Min";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->frame_rate_min = atoi(temp_buf);
-            xpath = BAD_CAST
-                "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-                "trt:Options//tt:H264//tt:FrameRateRange//tt:Max";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->frame_rate_max = atoi(temp_buf);
-            xpath = BAD_CAST
-                "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-                "trt:Options//tt:Extension//tt:H264//tt:BitrateRange//tt:Min";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->bitrate_min = atoi(temp_buf);
-            else onvif_data->bitrate_min = 128;
-            xpath = BAD_CAST
-                "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
-                "trt:Options//tt:Extension//tt:H264//tt:BitrateRange//tt:Max";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->bitrate_max = atoi(temp_buf);
-            else onvif_data->bitrate_max = 16384;
+                int size = 0;
+                bool found_size = false;
+                while (!found_size) {
+                    if (strlen(onvif_data->resolutions_buf[size]
+                        )
+                        == 0) {
+                        found_size = true;
+                    } else {
+                        size++;
+                        if (size > 15)
+                            found_size = true;
+                    }
+                }
+                bool duplicate = false;
+                for (int n = 0; n < size; n++) {
+                    if (strcmp(
+                            onvif_data->resolutions_buf[n], tmp
+                        )
+                        == 0) {
+                        duplicate = true;
+                    }
+                }
+                if (!duplicate) {
+                    strcpy(
+                        onvif_data->resolutions_buf[size], tmp
+                    );
+                    k++;
+                }
 
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(
-                    onvif_data->last_error,
-                    " getVideoEncoderConfigurationOptions"
-                );
-            xmlFreeDoc(reply);
+                if (width != NULL)
+                    xmlFree(width);
+                if (height != NULL)
+                    xmlFree(height);
+            }
+            xmlXPathFreeObject(xml_result);
         }
-    else
-        {
-            result = -1;
-            strcpy(
+
+        char temp_buf[128];
+        xpath = BAD_CAST
+            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
+            "trt:Options//tt:H264//tt:GovLengthRange//tt:Min";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->gov_length_min = atoi(temp_buf);
+        xpath = BAD_CAST
+            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
+            "trt:Options//tt:H264//tt:GovLengthRange//tt:Max";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->gov_length_max = atoi(temp_buf);
+        xpath = BAD_CAST
+            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
+            "trt:Options//tt:H264//tt:FrameRateRange//tt:Min";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->frame_rate_min = atoi(temp_buf);
+        xpath = BAD_CAST
+            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
+            "trt:Options//tt:H264//tt:FrameRateRange//tt:Max";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->frame_rate_max = atoi(temp_buf);
+        xpath = BAD_CAST
+            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
+            "trt:Options//tt:Extension//tt:H264//tt:BitrateRange//tt:Min";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->bitrate_min = atoi(temp_buf);
+        else
+            onvif_data->bitrate_min = 128;
+        xpath = BAD_CAST
+            "//s:Body//trt:GetVideoEncoderConfigurationOptionsResponse//"
+            "trt:Options//tt:Extension//tt:H264//tt:BitrateRange//tt:Max";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->bitrate_max = atoi(temp_buf);
+        else
+            onvif_data->bitrate_max = 16384;
+
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(
                 onvif_data->last_error,
-                "getVideoEncoderConfigurationOptions - No XML reply"
+                " getVideoEncoderConfigurationOptions"
             );
-        }
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(
+            onvif_data->last_error,
+            "getVideoEncoderConfigurationOptions - No XML reply"
+        );
+    }
     return result;
 }
 
-int getVideoEncoderConfiguration(struct OnvifData *onvif_data)
+int getVideoEncoderConfiguration(struct OnvifData* onvif_data)
 {
     memset(
         onvif_data->video_encoder_name, 0,
@@ -1145,130 +1078,111 @@ int getVideoEncoderConfiguration(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlChar *xpath;
-            char temp_buf[128] = { 0 };
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+    if (reply != NULL) {
+        xmlChar* xpath;
+        char temp_buf[128] = { 0 };
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Name";
-            getXmlValue(reply, xpath, onvif_data->video_encoder_name, 128);
+        getXmlValue(reply, xpath, onvif_data->video_encoder_name, 128);
 
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
                          "trt:Configuration//tt:UseCount";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->use_count = atoi(temp_buf);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->use_count = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
                          "trt:Configuration//tt:GuaranteedFrameRate";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                {
-                    if (strcmp(temp_buf, "true") == 0)
-                        onvif_data->guaranteed_frame_rate = true;
-                    else onvif_data->guaranteed_frame_rate = false;
-                }
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0) {
+            if (strcmp(temp_buf, "true") == 0)
+                onvif_data->guaranteed_frame_rate = true;
+            else
+                onvif_data->guaranteed_frame_rate = false;
+        }
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Encoding";
-            getXmlValue(reply, xpath, onvif_data->encoding, 128);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+        getXmlValue(reply, xpath, onvif_data->encoding, 128);
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Resolution//tt:Width";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->width = atoi(temp_buf);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->width = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Resolution//tt:Height";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->height = atoi(temp_buf);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->height = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Quality";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->quality = atof(temp_buf);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->quality = atof(temp_buf);
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
                          "trt:Configuration//tt:RateControl//tt:FrameRateLimit";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->frame_rate = atoi(temp_buf);
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->frame_rate = atoi(temp_buf);
+        xpath = BAD_CAST
+            "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+            "trt:Configuration//tt:RateControl//tt:EncodingInterval";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->encoding_interval = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+                         "trt:Configuration//tt:RateControl//tt:BitrateLimit";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->bitrate = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+                         "trt:Configuration//tt:H264//tt:H264Profile";
+        getXmlValue(reply, xpath, onvif_data->h264_profile, 128);
+
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+                         "trt:Configuration//tt:H264//tt:GovLength";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->gov_length = atoi(temp_buf);
+
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+                         "trt:Configuration//tt:Multicast//tt:Address//tt:Type";
+        getXmlValue(reply, xpath, onvif_data->multicast_address_type, 128);
+        if (strcmp(onvif_data->multicast_address_type, "IPv6") == 0)
             xpath = BAD_CAST
                 "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                "trt:Configuration//tt:RateControl//tt:EncodingInterval";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->encoding_interval = atoi(temp_buf);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:RateControl//tt:BitrateLimit";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->bitrate = atoi(temp_buf);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:H264//tt:H264Profile";
-            getXmlValue(reply, xpath, onvif_data->h264_profile, 128);
-
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:H264//tt:GovLength";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->gov_length = atoi(temp_buf);
-
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                         "trt:Configuration//tt:Multicast//tt:Address//tt:Type";
-            getXmlValue(reply, xpath, onvif_data->multicast_address_type, 128);
-            if (strcmp(onvif_data->multicast_address_type, "IPv6") == 0)
-                xpath = BAD_CAST
-                    "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                    "trt:Configuration//tt:Multicast//tt:Address//"
-                    "tt:IPv6Address";
-            else
-                xpath = BAD_CAST
-                    "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
-                    "trt:Configuration//tt:Multicast//tt:Address//"
-                    "tt:IPv4Address";
-            getXmlValue(reply, xpath, onvif_data->multicast_address, 128);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+                "trt:Configuration//tt:Multicast//tt:Address//"
+                "tt:IPv6Address";
+        else
+            xpath = BAD_CAST
+                "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+                "trt:Configuration//tt:Multicast//tt:Address//"
+                "tt:IPv4Address";
+        getXmlValue(reply, xpath, onvif_data->multicast_address, 128);
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Multicast//tt:Port";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->multicast_port = atoi(temp_buf);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->multicast_port = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Multicast//tt:TTL";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->multicast_ttl = atoi(temp_buf);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->multicast_ttl = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Multicast//tt:AutoStart";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                {
-                    if (strcmp(temp_buf, "true") == 0)
-                        onvif_data->autostart = true;
-                    else onvif_data->autostart = false;
-                }
-            xpath =
-                BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0) {
+            if (strcmp(temp_buf, "true") == 0)
+                onvif_data->autostart = true;
+            else
+                onvif_data->autostart = false;
+        }
+        xpath = BAD_CAST "//s:Body//trt:GetVideoEncoderConfigurationResponse//"
                          "trt:Configuration//tt:SessionTimeout";
-            getXmlValue(reply, xpath, onvif_data->session_time_out, 128);
+        getXmlValue(reply, xpath, onvif_data->session_time_out, 128);
 
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(onvif_data->last_error, " getVideoEncoderConfiguration");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(
-                onvif_data->last_error,
-                "getVideoEncoderConfiguration - No XML reply"
-            );
-        }
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getVideoEncoderConfiguration");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(
+            onvif_data->last_error,
+            "getVideoEncoderConfiguration - No XML reply"
+        );
+    }
     return result;
 }
 
-int setVideoEncoderConfiguration(struct OnvifData *onvif_data)
+int setVideoEncoderConfiguration(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -1293,15 +1207,17 @@ int setVideoEncoderConfiguration(struct OnvifData *onvif_data)
     sprintf(height_buf, "%d", onvif_data->height);
 
     sprintf(quality_buf, "%f", onvif_data->quality);
-    for (int i = 0; i < strlen(quality_buf); i++)
-        {
-            if (quality_buf[i] == ',') quality_buf[i] = '.';
-        }
+    for (int i = 0; i < strlen(quality_buf); i++) {
+        if (quality_buf[i] == ',')
+            quality_buf[i] = '.';
+    }
 
     sprintf(multicast_port_buf, "%d", onvif_data->multicast_port);
     sprintf(multicast_ttl_buf, "%d", onvif_data->multicast_ttl);
-    if (onvif_data->autostart) strcpy(autostart_buf, "true");
-    else strcpy(autostart_buf, "false");
+    if (onvif_data->autostart)
+        strcpy(autostart_buf, "true");
+    else
+        strcpy(autostart_buf, "false");
     sprintf(encoding_interval_buf, "%d", onvif_data->encoding_interval);
 
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
@@ -1352,15 +1268,13 @@ int setVideoEncoderConfiguration(struct OnvifData *onvif_data)
         onvif_data->encoding[0] ? BAD_CAST onvif_data->encoding
                                 : BAD_CAST "H264"
     );
-    xmlNodePtr resolution =
-        xmlNewTextChild(configuration, ns_tt, BAD_CAST "Resolution", NULL);
+    xmlNodePtr resolution = xmlNewTextChild(configuration, ns_tt, BAD_CAST "Resolution", NULL);
     xmlNewTextChild(resolution, ns_tt, BAD_CAST "Width", BAD_CAST width_buf);
     xmlNewTextChild(resolution, ns_tt, BAD_CAST "Height", BAD_CAST height_buf);
     xmlNewTextChild(
         configuration, ns_tt, BAD_CAST "Quality", BAD_CAST quality_buf
     );
-    xmlNodePtr rateControl =
-        xmlNewTextChild(configuration, ns_tt, BAD_CAST "RateControl", NULL);
+    xmlNodePtr rateControl = xmlNewTextChild(configuration, ns_tt, BAD_CAST "RateControl", NULL);
     xmlNewTextChild(
         rateControl, ns_tt, BAD_CAST "FrameRateLimit", BAD_CAST frame_rate_buf
     );
@@ -1371,16 +1285,13 @@ int setVideoEncoderConfiguration(struct OnvifData *onvif_data)
     xmlNewTextChild(
         rateControl, ns_tt, BAD_CAST "BitrateLimit", BAD_CAST bitrate_buf
     );
-    xmlNodePtr h264 =
-        xmlNewTextChild(configuration, ns_tt, BAD_CAST "H264", NULL);
+    xmlNodePtr h264 = xmlNewTextChild(configuration, ns_tt, BAD_CAST "H264", NULL);
     xmlNewTextChild(h264, ns_tt, BAD_CAST "GovLength", BAD_CAST gov_length_buf);
     xmlNewTextChild(
         h264, ns_tt, BAD_CAST "H264Profile", BAD_CAST onvif_data->h264_profile
     );
-    xmlNodePtr multicast =
-        xmlNewTextChild(configuration, ns_tt, BAD_CAST "Multicast", NULL);
-    xmlNodePtr address =
-        xmlNewTextChild(multicast, ns_tt, BAD_CAST "Address", NULL);
+    xmlNodePtr multicast = xmlNewTextChild(configuration, ns_tt, BAD_CAST "Multicast", NULL);
+    xmlNodePtr address = xmlNewTextChild(multicast, ns_tt, BAD_CAST "Address", NULL);
     xmlNewTextChild(
         address, ns_tt, BAD_CAST "Type",
         BAD_CAST onvif_data->multicast_address_type
@@ -1411,39 +1322,34 @@ int setVideoEncoderConfiguration(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(onvif_data->last_error, " setVideoEncoderConfiguration");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(
-                onvif_data->last_error,
-                "setVideoEncoderConfiguration - No XML reply"
-            );
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " setVideoEncoderConfiguration");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(
+            onvif_data->last_error,
+            "setVideoEncoderConfiguration - No XML reply"
+        );
+    }
     return result;
 }
 
-int getAudioEncoderConfigurationOptions(struct OnvifData *onvif_data)
+int getAudioEncoderConfigurationOptions(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
-    for (int i = 0; i < 3; i++)
-        {
-            memset(
-                onvif_data->audio_encoders[i], 0,
-                sizeof(onvif_data->audio_encoders[i])
-            );
-            for (int j = 0; j < 8; j++)
-                {
-                    onvif_data->audio_sample_rates[i][j] = 0;
-                    onvif_data->audio_bitrates[i][j] = 0;
-                }
+    for (int i = 0; i < 3; i++) {
+        memset(
+            onvif_data->audio_encoders[i], 0,
+            sizeof(onvif_data->audio_encoders[i])
+        );
+        for (int j = 0; j < 8; j++) {
+            onvif_data->audio_sample_rates[i][j] = 0;
+            onvif_data->audio_bitrates[i][j] = 0;
         }
+    }
     int result = 0;
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
@@ -1480,115 +1386,101 @@ int getAudioEncoderConfigurationOptions(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlChar *xpath = BAD_CAST
-                "//s:Body//trt:GetAudioEncoderConfigurationOptionsResponse//"
-                "trt:Options//tt:Encoding";
-            xmlNodeSetPtr nodeset;
-            xmlXPathObjectPtr xml_result = getNodeSet(reply, xpath);
-            int k = 0;
-            if (xml_result)
-                {
-                    nodeset = xml_result->nodesetval;
-                    for (int i = 0; i < nodeset->nodeNr; i++)
-                        {
-                            xmlNodePtr cur = nodeset->nodeTab[i]->children;
-                            while (cur != NULL)
-                                {
-                                    strcpy(
-                                        onvif_data->audio_encoders[i],
-                                        cur->content
-                                    );
-                                    cur = cur->next;
-                                }
-                        }
-                    xmlXPathFreeObject(xml_result);
+    if (reply != NULL) {
+        xmlChar* xpath = BAD_CAST
+            "//s:Body//trt:GetAudioEncoderConfigurationOptionsResponse//"
+            "trt:Options//tt:Encoding";
+        xmlNodeSetPtr nodeset;
+        xmlXPathObjectPtr xml_result = getNodeSet(reply, xpath);
+        int k = 0;
+        if (xml_result) {
+            nodeset = xml_result->nodesetval;
+            for (int i = 0; i < nodeset->nodeNr; i++) {
+                xmlNodePtr cur = nodeset->nodeTab[i]->children;
+                while (cur != NULL) {
+                    strcpy(
+                        onvif_data->audio_encoders[i],
+                        cur->content
+                    );
+                    cur = cur->next;
                 }
-
-            xmlChar *item = NULL;
-
-            xpath = BAD_CAST
-                "//s:Body//trt:GetAudioEncoderConfigurationOptionsResponse//"
-                "trt:Options//tt:BitrateList";
-            xml_result = getNodeSet(reply, xpath);
-            k = 0;
-            if (xml_result)
-                {
-                    nodeset = xml_result->nodesetval;
-                    for (int i = 0; i < nodeset->nodeNr; i++)
-                        {
-                            xmlNodePtr cur = nodeset->nodeTab[i]->children;
-                            int j = 0;
-                            while (cur != NULL)
-                                {
-                                    item = xmlNodeListGetString(
-                                        reply, cur->xmlChildrenNode, 1
-                                    );
-                                    if (item)
-                                        {
-                                            onvif_data->audio_bitrates[i][j] =
-                                                atoi(item);
-                                            j++;
-                                        }
-                                    cur = cur->next;
-                                }
-                        }
-                    xmlXPathFreeObject(xml_result);
-                }
-
-            xpath = BAD_CAST
-                "//s:Body//trt:GetAudioEncoderConfigurationOptionsResponse//"
-                "trt:Options//tt:SampleRateList";
-            xml_result = getNodeSet(reply, xpath);
-            k = 0;
-            if (xml_result)
-                {
-                    nodeset = xml_result->nodesetval;
-                    for (int i = 0; i < nodeset->nodeNr; i++)
-                        {
-                            xmlNodePtr cur = nodeset->nodeTab[i]->children;
-                            int j = 0;
-                            while (cur != NULL)
-                                {
-                                    item = xmlNodeListGetString(
-                                        reply, cur->xmlChildrenNode, 1
-                                    );
-                                    if (item)
-                                        {
-                                            onvif_data
-                                                ->audio_sample_rates[i][j] =
-                                                atoi(item);
-                                            j++;
-                                        }
-                                    cur = cur->next;
-                                }
-                        }
-                    xmlXPathFreeObject(xml_result);
-                }
-
-            if (item) xmlFree(item);
-
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(
-                    onvif_data->last_error,
-                    " getAudioEncoderConfigurationOptions"
-                );
-            xmlFreeDoc(reply);
+            }
+            xmlXPathFreeObject(xml_result);
         }
-    else
-        {
-            result = -1;
-            strcpy(
+
+        xmlChar* item = NULL;
+
+        xpath = BAD_CAST
+            "//s:Body//trt:GetAudioEncoderConfigurationOptionsResponse//"
+            "trt:Options//tt:BitrateList";
+        xml_result = getNodeSet(reply, xpath);
+        k = 0;
+        if (xml_result) {
+            nodeset = xml_result->nodesetval;
+            for (int i = 0; i < nodeset->nodeNr; i++) {
+                xmlNodePtr cur = nodeset->nodeTab[i]->children;
+                int j = 0;
+                while (cur != NULL) {
+                    item = xmlNodeListGetString(
+                        reply, cur->xmlChildrenNode, 1
+                    );
+                    if (item) {
+                        onvif_data->audio_bitrates[i][j] = atoi(item);
+                        j++;
+                    }
+                    cur = cur->next;
+                }
+            }
+            xmlXPathFreeObject(xml_result);
+        }
+
+        xpath = BAD_CAST
+            "//s:Body//trt:GetAudioEncoderConfigurationOptionsResponse//"
+            "trt:Options//tt:SampleRateList";
+        xml_result = getNodeSet(reply, xpath);
+        k = 0;
+        if (xml_result) {
+            nodeset = xml_result->nodesetval;
+            for (int i = 0; i < nodeset->nodeNr; i++) {
+                xmlNodePtr cur = nodeset->nodeTab[i]->children;
+                int j = 0;
+                while (cur != NULL) {
+                    item = xmlNodeListGetString(
+                        reply, cur->xmlChildrenNode, 1
+                    );
+                    if (item) {
+                        onvif_data
+                            ->audio_sample_rates[i][j]
+                            = atoi(item);
+                        j++;
+                    }
+                    cur = cur->next;
+                }
+            }
+            xmlXPathFreeObject(xml_result);
+        }
+
+        if (item)
+            xmlFree(item);
+
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(
                 onvif_data->last_error,
-                "getAudioEncoderConfigurationOptions - No XML reply"
+                " getAudioEncoderConfigurationOptions"
             );
-        }
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(
+            onvif_data->last_error,
+            "getAudioEncoderConfigurationOptions - No XML reply"
+        );
+    }
     return result;
 }
 
-int getAudioEncoderConfiguration(struct OnvifData *onvif_data)
+int getAudioEncoderConfiguration(struct OnvifData* onvif_data)
 {
     memset(onvif_data->audio_name, 0, sizeof(onvif_data->audio_name));
     memset(onvif_data->audio_encoding, 0, sizeof(onvif_data->audio_encoding));
@@ -1635,89 +1527,76 @@ int getAudioEncoderConfiguration(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlChar *xpath;
-            char temp_buf[128] = { 0 };
-            xpath =
-                BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
+    if (reply != NULL) {
+        xmlChar* xpath;
+        char temp_buf[128] = { 0 };
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Name";
-            getXmlValue(reply, xpath, onvif_data->audio_name, 128);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
+        getXmlValue(reply, xpath, onvif_data->audio_name, 128);
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
                          "trt:Configuration//tt:UseCount";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->audio_use_count = atoi(temp_buf);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->audio_use_count = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Encoding";
-            getXmlValue(reply, xpath, onvif_data->audio_encoding, 128);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
+        getXmlValue(reply, xpath, onvif_data->audio_encoding, 128);
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Bitrate";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->audio_bitrate = atoi(temp_buf);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->audio_bitrate = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
                          "trt:Configuration//tt:SampleRate";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->audio_sample_rate = atoi(temp_buf);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->audio_sample_rate = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
                          "trt:Configuration//tt:SessionTimeout";
-            getXmlValue(reply, xpath, onvif_data->audio_session_timeout, 128);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
+        getXmlValue(reply, xpath, onvif_data->audio_session_timeout, 128);
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Multicast//tt:Address//tt:Type";
-            getXmlValue(reply, xpath, onvif_data->audio_multicast_type, 128);
-            if (strcmp(temp_buf, "IPv6") == 0)
-                xpath = BAD_CAST
-                    "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                    "trt:Configuration//tt:Multicast//tt:Address//"
-                    "tt:IPv6Address";
-            else
-                xpath = BAD_CAST
-                    "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
-                    "trt:Configuration//tt:Multicast//tt:Address//"
-                    "tt:IPv4Address";
-            getXmlValue(reply, xpath, onvif_data->audio_multicast_address, 128);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
+        getXmlValue(reply, xpath, onvif_data->audio_multicast_type, 128);
+        if (strcmp(temp_buf, "IPv6") == 0)
+            xpath = BAD_CAST
+                "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
+                "trt:Configuration//tt:Multicast//tt:Address//"
+                "tt:IPv6Address";
+        else
+            xpath = BAD_CAST
+                "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
+                "trt:Configuration//tt:Multicast//tt:Address//"
+                "tt:IPv4Address";
+        getXmlValue(reply, xpath, onvif_data->audio_multicast_address, 128);
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Multicast//tt:Port";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->audio_multicast_port = atoi(temp_buf);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->audio_multicast_port = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Multicast//tt:TTL";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->audio_multicast_TTL = atoi(temp_buf);
-            xpath =
-                BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->audio_multicast_TTL = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//trt:GetAudioEncoderConfigurationResponse//"
                          "trt:Configuration//tt:Multicast//tt:AutoStart";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                {
-                    if (strcmp(temp_buf, "true") == 0)
-                        onvif_data->audio_multicast_auto_start = true;
-                    else onvif_data->audio_multicast_auto_start = false;
-                }
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0) {
+            if (strcmp(temp_buf, "true") == 0)
+                onvif_data->audio_multicast_auto_start = true;
+            else
+                onvif_data->audio_multicast_auto_start = false;
+        }
 
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(onvif_data->last_error, " getAudioEncoderConfiguration");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(
-                onvif_data->last_error,
-                "getAudioEncoderConfiguration - No XML reply"
-            );
-        }
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getAudioEncoderConfiguration");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(
+            onvif_data->last_error,
+            "getAudioEncoderConfiguration - No XML reply"
+        );
+    }
     return result;
 }
 
-int setAudioEncoderConfiguration(struct OnvifData *onvif_data)
+int setAudioEncoderConfiguration(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -1734,8 +1613,10 @@ int setAudioEncoderConfiguration(struct OnvifData *onvif_data)
     sprintf(sample_rate_buf, "%d", onvif_data->audio_sample_rate);
     sprintf(multicast_port_buf, "%d", onvif_data->audio_multicast_port);
     sprintf(multicast_ttl_buf, "%d", onvif_data->audio_multicast_TTL);
-    if (onvif_data->audio_multicast_auto_start) strcpy(autostart_buf, "true");
-    else strcpy(autostart_buf, "false");
+    if (onvif_data->audio_multicast_auto_start)
+        strcpy(autostart_buf, "true");
+    else
+        strcpy(autostart_buf, "false");
 
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
@@ -1782,10 +1663,8 @@ int setAudioEncoderConfiguration(struct OnvifData *onvif_data)
     xmlNewTextChild(
         configuration, ns_tt, BAD_CAST "SampleRate", BAD_CAST sample_rate_buf
     );
-    xmlNodePtr multicast =
-        xmlNewTextChild(configuration, ns_tt, BAD_CAST "Multicast", NULL);
-    xmlNodePtr address =
-        xmlNewTextChild(multicast, ns_tt, BAD_CAST "Address", NULL);
+    xmlNodePtr multicast = xmlNewTextChild(configuration, ns_tt, BAD_CAST "Multicast", NULL);
+    xmlNodePtr address = xmlNewTextChild(multicast, ns_tt, BAD_CAST "Address", NULL);
     xmlNewTextChild(
         address, ns_tt, BAD_CAST "Type",
         BAD_CAST onvif_data->audio_multicast_type
@@ -1816,25 +1695,22 @@ int setAudioEncoderConfiguration(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(onvif_data->last_error, " setAudioEncoderConfiguration");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(
-                onvif_data->last_error,
-                "setAudioEncoderConfiguration - No XML reply"
-            );
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " setAudioEncoderConfiguration");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(
+            onvif_data->last_error,
+            "setAudioEncoderConfiguration - No XML reply"
+        );
+    }
     return result;
 }
 
-int getProfile(struct OnvifData *onvif_data)
+int getProfile(struct OnvifData* onvif_data)
 {
     memset(
         onvif_data->videoEncoderConfigurationToken, 0,
@@ -1871,8 +1747,7 @@ int getProfile(struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr getProfile =
-        xmlNewTextChild(body, ns_trt, BAD_CAST "GetProfile", NULL);
+    xmlNodePtr getProfile = xmlNewTextChild(body, ns_trt, BAD_CAST "GetProfile", NULL);
     xmlNewTextChild(
         getProfile, ns_trt, BAD_CAST "ProfileToken",
         BAD_CAST onvif_data->profileToken
@@ -1882,49 +1757,47 @@ int getProfile(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            char temp_buf[128];
+    if (reply != NULL) {
+        char temp_buf[128];
 
-            xmlChar *xpath;
+        xmlChar* xpath;
 
-            xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//"
-                             "tt:AudioEncoderConfiguration";
-            getNodeAttribute(
-                reply, xpath, BAD_CAST "token",
-                onvif_data->audioEncoderConfigurationToken, 128
-            );
-            xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//"
-                             "tt:AudioSourceConfiguration//tt:SourceToken";
-            getXmlValue(
-                reply, xpath, onvif_data->audioSourceConfigurationToken, 128
-            );
+        xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//"
+                         "tt:AudioEncoderConfiguration";
+        getNodeAttribute(
+            reply, xpath, BAD_CAST "token",
+            onvif_data->audioEncoderConfigurationToken, 128
+        );
+        xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//"
+                         "tt:AudioSourceConfiguration//tt:SourceToken";
+        getXmlValue(
+            reply, xpath, onvif_data->audioSourceConfigurationToken, 128
+        );
 
-            xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//"
-                             "tt:VideoEncoderConfiguration";
-            getNodeAttribute(
-                reply, xpath, BAD_CAST "token",
-                onvif_data->videoEncoderConfigurationToken, 128
-            );
-            xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//"
-                             "tt:VideoSourceConfiguration//tt:SourceToken";
-            getXmlValue(
-                reply, xpath, onvif_data->videoSourceConfigurationToken, 128
-            );
+        xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//"
+                         "tt:VideoEncoderConfiguration";
+        getNodeAttribute(
+            reply, xpath, BAD_CAST "token",
+            onvif_data->videoEncoderConfigurationToken, 128
+        );
+        xpath = BAD_CAST "//s:Body//trt:GetProfileResponse//trt:Profile//"
+                         "tt:VideoSourceConfiguration//tt:SourceToken";
+        getXmlValue(
+            reply, xpath, onvif_data->videoSourceConfigurationToken, 128
+        );
 
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " getProfile");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "getProfile - No XML reply");
-        }
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getProfile");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "getProfile - No XML reply");
+    }
     return result;
 }
 
-int getOptions(struct OnvifData *onvif_data)
+int getOptions(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -1945,8 +1818,7 @@ int getOptions(struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr getOptions =
-        xmlNewTextChild(body, ns_timg, BAD_CAST "GetOptions", NULL);
+    xmlNodePtr getOptions = xmlNewTextChild(body, ns_timg, BAD_CAST "GetOptions", NULL);
     xmlNewTextChild(
         getOptions, ns_timg, BAD_CAST "VideoSourceToken",
         BAD_CAST onvif_data->videoSourceConfigurationToken
@@ -1956,57 +1828,55 @@ int getOptions(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->imaging_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlChar *xpath;
-            char temp_buf[128] = { 0 };
+    if (reply != NULL) {
+        xmlChar* xpath;
+        char temp_buf[128] = { 0 };
 
-            xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                             "timg:ImagingOptions//tt:Brightness//tt:Min";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->brightness_min = atoi(temp_buf);
-            xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                             "timg:ImagingOptions//tt:Brightness//tt:Max";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->brightness_max = atoi(temp_buf);
-            xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                             "timg:ImagingOptions//tt:ColorSaturation//tt:Min";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->saturation_min = atoi(temp_buf);
-            xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                             "timg:ImagingOptions//tt:ColorSaturation//tt:Max";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->saturation_max = atoi(temp_buf);
-            xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                             "timg:ImagingOptions//tt:Contrast//tt:Min";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->contrast_min = atoi(temp_buf);
-            xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                             "timg:ImagingOptions//tt:Contrast//tt:Max";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->contrast_max = atoi(temp_buf);
-            xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                             "timg:ImagingOptions//tt:Sharpness//tt:Min";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->sharpness_min = atoi(temp_buf);
-            xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
-                             "timg:ImagingOptions//tt:Sharpness//tt:Max";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->sharpness_max = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
+                         "timg:ImagingOptions//tt:Brightness//tt:Min";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->brightness_min = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
+                         "timg:ImagingOptions//tt:Brightness//tt:Max";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->brightness_max = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
+                         "timg:ImagingOptions//tt:ColorSaturation//tt:Min";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->saturation_min = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
+                         "timg:ImagingOptions//tt:ColorSaturation//tt:Max";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->saturation_max = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
+                         "timg:ImagingOptions//tt:Contrast//tt:Min";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->contrast_min = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
+                         "timg:ImagingOptions//tt:Contrast//tt:Max";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->contrast_max = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
+                         "timg:ImagingOptions//tt:Sharpness//tt:Min";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->sharpness_min = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//timg:GetOptionsResponse//"
+                         "timg:ImagingOptions//tt:Sharpness//tt:Max";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->sharpness_max = atoi(temp_buf);
 
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " getOptions");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "getOptions - No XML reply");
-        }
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getOptions");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "getOptions - No XML reply");
+    }
     return result;
 }
 
-int getImagingSettings(struct OnvifData *onvif_data)
+int getImagingSettings(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -2027,8 +1897,7 @@ int getImagingSettings(struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr getImagingSettings =
-        xmlNewTextChild(body, ns_timg, BAD_CAST "GetImagingSettings", NULL);
+    xmlNodePtr getImagingSettings = xmlNewTextChild(body, ns_timg, BAD_CAST "GetImagingSettings", NULL);
     xmlNewTextChild(
         getImagingSettings, ns_timg, BAD_CAST "VideoSourceToken",
         BAD_CAST onvif_data->videoSourceConfigurationToken
@@ -2038,42 +1907,39 @@ int getImagingSettings(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->imaging_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlChar *xpath;
-            char temp_buf[128] = { 0 };
+    if (reply != NULL) {
+        xmlChar* xpath;
+        char temp_buf[128] = { 0 };
 
-            xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//"
-                             "timg:ImagingSettings//tt:Brightness";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->brightness = atoi(temp_buf);
-            xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//"
-                             "timg:ImagingSettings//tt:ColorSaturation";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->saturation = atoi(temp_buf);
-            xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//"
-                             "timg:ImagingSettings//tt:Contrast";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->contrast = atoi(temp_buf);
-            xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//"
-                             "timg:ImagingSettings//tt:Sharpness";
-            if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
-                onvif_data->sharpness = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//"
+                         "timg:ImagingSettings//tt:Brightness";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->brightness = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//"
+                         "timg:ImagingSettings//tt:ColorSaturation";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->saturation = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//"
+                         "timg:ImagingSettings//tt:Contrast";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->contrast = atoi(temp_buf);
+        xpath = BAD_CAST "//s:Body//timg:GetImagingSettingsResponse//"
+                         "timg:ImagingSettings//tt:Sharpness";
+        if (getXmlValue(reply, xpath, temp_buf, 128) == 0)
+            onvif_data->sharpness = atoi(temp_buf);
 
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(onvif_data->last_error, " getImagingSettings");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "getImagingSettings - No XML reply");
-        }
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getImagingSettings");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "getImagingSettings - No XML reply");
+    }
     return result;
 }
 
-int setImagingSettings(struct OnvifData *onvif_data)
+int setImagingSettings(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -2107,8 +1973,7 @@ int setImagingSettings(struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr setImagingSettings =
-        xmlNewTextChild(body, ns_timg, BAD_CAST "SetImagingSettings", NULL);
+    xmlNodePtr setImagingSettings = xmlNewTextChild(body, ns_timg, BAD_CAST "SetImagingSettings", NULL);
     xmlNewTextChild(
         setImagingSettings, ns_timg, BAD_CAST "VideoSourceToken",
         BAD_CAST onvif_data->videoSourceConfigurationToken
@@ -2134,22 +1999,19 @@ int setImagingSettings(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->imaging_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(onvif_data->last_error, " setImagingSettings");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "setImagingSettings - No XML reply");
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " setImagingSettings");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "setImagingSettings - No XML reply");
+    }
     return result;
 }
 
-int continuousMove(float x, float y, float z, struct OnvifData *onvif_data)
+int continuousMove(float x, float y, float z, struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -2177,8 +2039,7 @@ int continuousMove(float x, float y, float z, struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr continuousMove =
-        xmlNewTextChild(body, ns_ptz, BAD_CAST "ContinuousMove", NULL);
+    xmlNodePtr continuousMove = xmlNewTextChild(body, ns_ptz, BAD_CAST "ContinuousMove", NULL);
     xmlNewTextChild(
         continuousMove, ns_ptz, BAD_CAST "ProfileToken",
         BAD_CAST onvif_data->profileToken
@@ -2193,37 +2054,32 @@ int continuousMove(float x, float y, float z, struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " continuousMove");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "continuousMove - No XML reply");
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " continuousMove");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "continuousMove - No XML reply");
+    }
     return result;
 }
 
-int moveStop(int type, struct OnvifData *onvif_data)
+int moveStop(int type, struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
     char pan_tilt_flag[128] = { 0 };
     char zoom_flag[128] = { 0 };
 
-    if (type == PAN_TILT_STOP)
-        {
-            strcpy(pan_tilt_flag, "true");
-            strcpy(zoom_flag, "false");
-        }
-    else if (type == ZOOM_STOP)
-        {
-            strcpy(pan_tilt_flag, "false");
-            strcpy(zoom_flag, "true");
-        }
+    if (type == PAN_TILT_STOP) {
+        strcpy(pan_tilt_flag, "true");
+        strcpy(zoom_flag, "false");
+    } else if (type == ZOOM_STOP) {
+        strcpy(pan_tilt_flag, "false");
+        strcpy(zoom_flag, "true");
+    }
 
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
@@ -2252,21 +2108,19 @@ int moveStop(int type, struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " moveStop");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "moveStop - No XML reply");
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " moveStop");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "moveStop - No XML reply");
+    }
     return result;
 }
 
-int setPreset(char *arg, struct OnvifData *onvif_data)
+int setPreset(char* arg, struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -2286,8 +2140,7 @@ int setPreset(char *arg, struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr setPreset =
-        xmlNewTextChild(body, ns_ptz, BAD_CAST "SetPreset", NULL);
+    xmlNodePtr setPreset = xmlNewTextChild(body, ns_ptz, BAD_CAST "SetPreset", NULL);
     xmlNewTextChild(
         setPreset, ns_ptz, BAD_CAST "ProfileToken",
         BAD_CAST onvif_data->profileToken
@@ -2298,21 +2151,19 @@ int setPreset(char *arg, struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " setPreset");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "setPreset - No XML reply");
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " setPreset");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "setPreset - No XML reply");
+    }
     return result;
 }
 
-int gotoPreset(char *arg, struct OnvifData *onvif_data)
+int gotoPreset(char* arg, struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -2332,8 +2183,7 @@ int gotoPreset(char *arg, struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr gotoPreset =
-        xmlNewTextChild(body, ns_ptz, BAD_CAST "GotoPreset", NULL);
+    xmlNodePtr gotoPreset = xmlNewTextChild(body, ns_ptz, BAD_CAST "GotoPreset", NULL);
     xmlNewTextChild(
         gotoPreset, ns_ptz, BAD_CAST "ProfileToken",
         BAD_CAST onvif_data->profileToken
@@ -2344,21 +2194,19 @@ int gotoPreset(char *arg, struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->ptz_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " gotoPreset");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "gotoPreset - No XML reply");
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " gotoPreset");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "gotoPreset - No XML reply");
+    }
     return result;
 }
 
-int setUser(char *new_password, struct OnvifData *onvif_data)
+int setUser(char* new_password, struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -2381,8 +2229,7 @@ int setUser(char *new_password, struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr setUser =
-        xmlNewTextChild(body, ns_tds, BAD_CAST "SetUser", NULL);
+    xmlNodePtr setUser = xmlNewTextChild(body, ns_tds, BAD_CAST "SetUser", NULL);
     xmlNodePtr user = xmlNewTextChild(setUser, ns_tds, BAD_CAST "User", NULL);
     xmlNewTextChild(user, ns_tt, BAD_CAST "Username", BAD_CAST "admin");
     xmlNewTextChild(user, ns_tt, BAD_CAST "Password", BAD_CAST new_password);
@@ -2394,21 +2241,19 @@ int setUser(char *new_password, struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " setUser");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "setUser - No XML reply");
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " setUser");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "setUser - No XML reply");
+    }
     return result;
 }
 
-int setSystemDateAndTime(struct OnvifData *onvif_data)
+int setSystemDateAndTime(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -2423,7 +2268,7 @@ int setSystemDateAndTime(struct OnvifData *onvif_data)
     printf("changer %f\n", changer);
     rawtime += changer * 3600;
     */
-    struct tm *UTCTime = gmtime(&rawtime);
+    struct tm* UTCTime = gmtime(&rawtime);
 
     /*
     if (strlen(onvif_data->timezone))
@@ -2434,23 +2279,27 @@ int setSystemDateAndTime(struct OnvifData *onvif_data)
 
     char datetimetype[16];
     memset(datetimetype, 0, sizeof(datetimetype));
-    if (onvif_data->datetimetype == 'M') { strcpy(datetimetype, "Manual"); }
-    if (onvif_data->datetimetype == 'N') { strcpy(datetimetype, "NTP"); }
-    if (onvif_data->datetimetype == 'U')
-        {
-            strcpy(datetimetype, "Manual");
-            // UTCTime = localtime(&rawtime);
-            memset(onvif_data->timezone, 0, sizeof(onvif_data->timezone));
-            strcpy(onvif_data->timezone, "UTC0");
-        }
+    if (onvif_data->datetimetype == 'M') {
+        strcpy(datetimetype, "Manual");
+    }
+    if (onvif_data->datetimetype == 'N') {
+        strcpy(datetimetype, "NTP");
+    }
+    if (onvif_data->datetimetype == 'U') {
+        strcpy(datetimetype, "Manual");
+        // UTCTime = localtime(&rawtime);
+        memset(onvif_data->timezone, 0, sizeof(onvif_data->timezone));
+        strcpy(onvif_data->timezone, "UTC0");
+    }
 
-    if (!strcmp(datetimetype, "Manual") &&
-        !strcmp(onvif_data->timezone, "UTC0"))
+    if (!strcmp(datetimetype, "Manual") && !strcmp(onvif_data->timezone, "UTC0"))
         UTCTime = localtime(&rawtime);
 
     char dst_flag_buf[128];
-    if (onvif_data->dst) strcpy(dst_flag_buf, "true");
-    else strcpy(dst_flag_buf, "false");
+    if (onvif_data->dst)
+        strcpy(dst_flag_buf, "true");
+    else
+        strcpy(dst_flag_buf, "false");
     /*
     if (UTCTime->tm_isdst == 1)
         strcpy(dst_flag_buf, "true");
@@ -2489,8 +2338,7 @@ int setSystemDateAndTime(struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr setSystemDateAndTime =
-        xmlNewTextChild(body, ns_tds, BAD_CAST "SetSystemDateAndTime", NULL);
+    xmlNodePtr setSystemDateAndTime = xmlNewTextChild(body, ns_tds, BAD_CAST "SetSystemDateAndTime", NULL);
     xmlNewTextChild(
         setSystemDateAndTime, ns_tds, BAD_CAST "DateTimeType",
         BAD_CAST datetimetype
@@ -2508,13 +2356,11 @@ int setSystemDateAndTime(struct OnvifData *onvif_data)
     xmlNodePtr utcDateTime = xmlNewTextChild(
         setSystemDateAndTime, ns_tds, BAD_CAST "UTCDateTime", NULL
     );
-    xmlNodePtr cameraTime =
-        xmlNewTextChild(utcDateTime, ns_tt, BAD_CAST "Time", NULL);
+    xmlNodePtr cameraTime = xmlNewTextChild(utcDateTime, ns_tt, BAD_CAST "Time", NULL);
     xmlNewTextChild(cameraTime, ns_tt, BAD_CAST "Hour", BAD_CAST hour_buf);
     xmlNewTextChild(cameraTime, ns_tt, BAD_CAST "Minute", BAD_CAST minute_buf);
     xmlNewTextChild(cameraTime, ns_tt, BAD_CAST "Second", BAD_CAST second_buf);
-    xmlNodePtr cameraDate =
-        xmlNewTextChild(utcDateTime, ns_tt, BAD_CAST "Date", NULL);
+    xmlNodePtr cameraDate = xmlNewTextChild(utcDateTime, ns_tt, BAD_CAST "Date", NULL);
     xmlNewTextChild(cameraDate, ns_tt, BAD_CAST "Year", BAD_CAST year_buf);
     xmlNewTextChild(cameraDate, ns_tt, BAD_CAST "Month", BAD_CAST month_buf);
     xmlNewTextChild(cameraDate, ns_tt, BAD_CAST "Day", BAD_CAST day_buf);
@@ -2523,71 +2369,70 @@ int setSystemDateAndTime(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(onvif_data->last_error, " setSystemDateAndTime");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(
-                onvif_data->last_error, "setSystemDateAndTime - No XML reply"
-            );
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " setSystemDateAndTime");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(
+            onvif_data->last_error, "setSystemDateAndTime - No XML reply"
+        );
+    }
     return result;
 }
 
-int setSystemDateAndTimeUsingTimezone(struct OnvifData *onvif_data)
+int setSystemDateAndTimeUsingTimezone(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
     time_t rawtime;
     time(&rawtime);
     bool special = false;
-    struct tm *UTCTime = localtime(&rawtime);
+    struct tm* UTCTime = localtime(&rawtime);
     char dst_flag_buf[128];
-    if (UTCTime->tm_isdst == 1) strcpy(dst_flag_buf, "true");
-    else strcpy(dst_flag_buf, "false");
-    if (strcmp(onvif_data->timezone, "UTC0") == 0) { special = true; }
+    if (UTCTime->tm_isdst == 1)
+        strcpy(dst_flag_buf, "true");
     else
-        {
-            if (!onvif_data->timezone[0])
-                {
+        strcpy(dst_flag_buf, "false");
+    if (strcmp(onvif_data->timezone, "UTC0") == 0) {
+        special = true;
+    } else {
+        if (!onvif_data->timezone[0]) {
 #ifndef _WIN32
-                    // work out a timezone to use on the camera
-                    int h = -(UTCTime->tm_gmtoff / 3600);
-                    int m = (UTCTime->tm_gmtoff + 3600 * h) / 60;
-                    if (m)
-                        sprintf(
-                            onvif_data->timezone, "%s%d:%02d:00%s", tzname[0],
-                            h, m, tzname[1]
-                        );
-                    else
-                        sprintf(
-                            onvif_data->timezone, "%s%d%s", tzname[0], h,
-                            tzname[1]
-                        );
+            // work out a timezone to use on the camera
+            int h = -(UTCTime->tm_gmtoff / 3600);
+            int m = (UTCTime->tm_gmtoff + 3600 * h) / 60;
+            if (m)
+                sprintf(
+                    onvif_data->timezone, "%s%d:%02d:00%s", tzname[0],
+                    h, m, tzname[1]
+                );
+            else
+                sprintf(
+                    onvif_data->timezone, "%s%d%s", tzname[0], h,
+                    tzname[1]
+                );
 #else
-                    int h = _timezone / 3600;
-                    int m = (_timezone - 3600 * h) / 60;
-                    if (m)
-                        sprintf(
-                            onvif_data->timezone, "%s%d:%02d:00%s", _tzname[0],
-                            h, m, _tzname[1]
-                        );
-                    else
-                        sprintf(
-                            onvif_data->timezone, "%s%d%s", _tzname[0], h,
-                            _tzname[1]
-                        );
+            int h = _timezone / 3600;
+            int m = (_timezone - 3600 * h) / 60;
+            if (m)
+                sprintf(
+                    onvif_data->timezone, "%s%d:%02d:00%s", _tzname[0],
+                    h, m, _tzname[1]
+                );
+            else
+                sprintf(
+                    onvif_data->timezone, "%s%d%s", _tzname[0], h,
+                    _tzname[1]
+                );
 #endif
-                }
-            UTCTime = gmtime(&rawtime);
         }
-    if (!onvif_data->datetimetype) onvif_data->datetimetype = 'M'; // manual
+        UTCTime = gmtime(&rawtime);
+    }
+    if (!onvif_data->datetimetype)
+        onvif_data->datetimetype = 'M'; // manual
     char hour_buf[128];
     char minute_buf[128];
     char second_buf[128];
@@ -2620,8 +2465,7 @@ int setSystemDateAndTimeUsingTimezone(struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr setSystemDateAndTime =
-        xmlNewTextChild(body, ns_tds, BAD_CAST "SetSystemDateAndTime", NULL);
+    xmlNodePtr setSystemDateAndTime = xmlNewTextChild(body, ns_tds, BAD_CAST "SetSystemDateAndTime", NULL);
     xmlNewTextChild(
         setSystemDateAndTime, ns_tds, BAD_CAST "DateTimeType", BAD_CAST "Manual"
     );
@@ -2638,13 +2482,11 @@ int setSystemDateAndTimeUsingTimezone(struct OnvifData *onvif_data)
     xmlNodePtr utcDateTime = xmlNewTextChild(
         setSystemDateAndTime, ns_tds, BAD_CAST "UTCDateTime", NULL
     );
-    xmlNodePtr cameraTime =
-        xmlNewTextChild(utcDateTime, ns_tt, BAD_CAST "Time", NULL);
+    xmlNodePtr cameraTime = xmlNewTextChild(utcDateTime, ns_tt, BAD_CAST "Time", NULL);
     xmlNewTextChild(cameraTime, ns_tt, BAD_CAST "Hour", BAD_CAST hour_buf);
     xmlNewTextChild(cameraTime, ns_tt, BAD_CAST "Minute", BAD_CAST minute_buf);
     xmlNewTextChild(cameraTime, ns_tt, BAD_CAST "Second", BAD_CAST second_buf);
-    xmlNodePtr cameraDate =
-        xmlNewTextChild(utcDateTime, ns_tt, BAD_CAST "Date", NULL);
+    xmlNodePtr cameraDate = xmlNewTextChild(utcDateTime, ns_tt, BAD_CAST "Date", NULL);
     xmlNewTextChild(cameraDate, ns_tt, BAD_CAST "Year", BAD_CAST year_buf);
     xmlNewTextChild(cameraDate, ns_tt, BAD_CAST "Month", BAD_CAST month_buf);
     xmlNewTextChild(cameraDate, ns_tt, BAD_CAST "Day", BAD_CAST day_buf);
@@ -2653,139 +2495,130 @@ int setSystemDateAndTimeUsingTimezone(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            xmlFreeDoc(reply);
-            if (result == 0 && onvif_data->datetimetype == 'N')
-                {
-                    // switch back to NTP after we have nudged it to correct
-                    time_t newtime;
-                    time(&newtime);
-                    if (newtime != rawtime)
-                        {
-                            // save a little effort if we are within a second of
-                            // the previous check
-                            if (special) UTCTime = localtime(&newtime);
-                            else UTCTime = gmtime(&newtime);
-                            sprintf(hour_buf, "%d", UTCTime->tm_hour);
-                            sprintf(minute_buf, "%d", UTCTime->tm_min);
-                            sprintf(second_buf, "%d", UTCTime->tm_sec);
-                            sprintf(year_buf, "%d", UTCTime->tm_year + 1900);
-                            sprintf(month_buf, "%d", UTCTime->tm_mon + 1);
-                            sprintf(day_buf, "%d", UTCTime->tm_mday);
-                        }
-                    doc = xmlNewDoc(BAD_CAST "1.0");
-                    xmlNodePtr root =
-                        xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
-                    xmlDocSetRootElement(doc, root);
-                    xmlNsPtr ns_env = xmlNewNs(
-                        root,
-                        BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
-                        BAD_CAST "SOAP-ENV"
-                    );
-                    xmlNsPtr ns_tds = xmlNewNs(
-                        root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl",
-                        BAD_CAST "tds"
-                    );
-                    xmlNsPtr ns_tt = xmlNewNs(
-                        root, BAD_CAST "http://www.onvif.org/ver10/schema",
-                        BAD_CAST "tt"
-                    );
-                    xmlSetNs(root, ns_env);
-                    addUsernameDigestHeader(
-                        root, ns_env, onvif_data->username,
-                        onvif_data->password, onvif_data->time_offset
-                    );
-                    xmlNodePtr body =
-                        xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-                    xmlNodePtr setSystemDateAndTime = xmlNewTextChild(
-                        body, ns_tds, BAD_CAST "SetSystemDateAndTime", NULL
-                    );
-                    xmlNewTextChild(
-                        setSystemDateAndTime, ns_tds, BAD_CAST "DateTimeType",
-                        BAD_CAST "NTP"
-                    );
-                    xmlNewTextChild(
-                        setSystemDateAndTime, ns_tds,
-                        BAD_CAST "DaylightSavings", BAD_CAST dst_flag_buf
-                    );
-                    xmlNodePtr timeZone = xmlNewTextChild(
-                        setSystemDateAndTime, ns_tds, BAD_CAST "TimeZone", NULL
-                    );
-                    xmlNewTextChild(
-                        timeZone, ns_tt, BAD_CAST "TZ",
-                        BAD_CAST onvif_data->timezone
-                    );
-                    // Need to include date/time even though the specs say it
-                    // should be ignored
-                    xmlNodePtr utcDateTime = xmlNewTextChild(
-                        setSystemDateAndTime, ns_tds, BAD_CAST "UTCDateTime",
-                        NULL
-                    );
-                    xmlNodePtr cameraTime = xmlNewTextChild(
-                        utcDateTime, ns_tt, BAD_CAST "Time", NULL
-                    );
-                    xmlNewTextChild(
-                        cameraTime, ns_tt, BAD_CAST "Hour", BAD_CAST hour_buf
-                    );
-                    xmlNewTextChild(
-                        cameraTime, ns_tt, BAD_CAST "Minute",
-                        BAD_CAST minute_buf
-                    );
-                    xmlNewTextChild(
-                        cameraTime, ns_tt, BAD_CAST "Second",
-                        BAD_CAST second_buf
-                    );
-                    xmlNodePtr cameraDate = xmlNewTextChild(
-                        utcDateTime, ns_tt, BAD_CAST "Date", NULL
-                    );
-                    xmlNewTextChild(
-                        cameraDate, ns_tt, BAD_CAST "Year", BAD_CAST year_buf
-                    );
-                    xmlNewTextChild(
-                        cameraDate, ns_tt, BAD_CAST "Month", BAD_CAST month_buf
-                    );
-                    xmlNewTextChild(
-                        cameraDate, ns_tt, BAD_CAST "Day", BAD_CAST day_buf
-                    );
-                    char cmd[4096] = { 0 };
-                    addHttpHeader(
-                        doc, root, onvif_data->xaddrs,
-                        onvif_data->device_service, cmd, 4096
-                    );
-                    xmlDocPtr reply =
-                        sendCommandToCamera(cmd, onvif_data->xaddrs);
-                    if (reply != NULL)
-                        {
-                            result = checkForXmlErrorMsg(
-                                reply, onvif_data->last_error
-                            );
-                            xmlFreeDoc(reply);
-                        }
-                    else
-                        {
-                            result = -1;
-                            strcpy(
-                                onvif_data->last_error,
-                                "setSystemDateAndTimeUsingTimezone - No XML "
-                                "reply"
-                            );
-                        }
-                }
-        }
-    else
-        {
-            result = -1;
-            strcpy(
-                onvif_data->last_error,
-                "setSystemDateAndTimeUsingTimezone 2 - No XML reply"
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        xmlFreeDoc(reply);
+        if (result == 0 && onvif_data->datetimetype == 'N') {
+            // switch back to NTP after we have nudged it to correct
+            time_t newtime;
+            time(&newtime);
+            if (newtime != rawtime) {
+                // save a little effort if we are within a second of
+                // the previous check
+                if (special)
+                    UTCTime = localtime(&newtime);
+                else
+                    UTCTime = gmtime(&newtime);
+                sprintf(hour_buf, "%d", UTCTime->tm_hour);
+                sprintf(minute_buf, "%d", UTCTime->tm_min);
+                sprintf(second_buf, "%d", UTCTime->tm_sec);
+                sprintf(year_buf, "%d", UTCTime->tm_year + 1900);
+                sprintf(month_buf, "%d", UTCTime->tm_mon + 1);
+                sprintf(day_buf, "%d", UTCTime->tm_mday);
+            }
+            doc = xmlNewDoc(BAD_CAST "1.0");
+            xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
+            xmlDocSetRootElement(doc, root);
+            xmlNsPtr ns_env = xmlNewNs(
+                root,
+                BAD_CAST "http://www.w3.org/2003/05/soap-envelope",
+                BAD_CAST "SOAP-ENV"
             );
+            xmlNsPtr ns_tds = xmlNewNs(
+                root, BAD_CAST "http://www.onvif.org/ver10/device/wsdl",
+                BAD_CAST "tds"
+            );
+            xmlNsPtr ns_tt = xmlNewNs(
+                root, BAD_CAST "http://www.onvif.org/ver10/schema",
+                BAD_CAST "tt"
+            );
+            xmlSetNs(root, ns_env);
+            addUsernameDigestHeader(
+                root, ns_env, onvif_data->username,
+                onvif_data->password, onvif_data->time_offset
+            );
+            xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
+            xmlNodePtr setSystemDateAndTime = xmlNewTextChild(
+                body, ns_tds, BAD_CAST "SetSystemDateAndTime", NULL
+            );
+            xmlNewTextChild(
+                setSystemDateAndTime, ns_tds, BAD_CAST "DateTimeType",
+                BAD_CAST "NTP"
+            );
+            xmlNewTextChild(
+                setSystemDateAndTime, ns_tds,
+                BAD_CAST "DaylightSavings", BAD_CAST dst_flag_buf
+            );
+            xmlNodePtr timeZone = xmlNewTextChild(
+                setSystemDateAndTime, ns_tds, BAD_CAST "TimeZone", NULL
+            );
+            xmlNewTextChild(
+                timeZone, ns_tt, BAD_CAST "TZ",
+                BAD_CAST onvif_data->timezone
+            );
+            // Need to include date/time even though the specs say it
+            // should be ignored
+            xmlNodePtr utcDateTime = xmlNewTextChild(
+                setSystemDateAndTime, ns_tds, BAD_CAST "UTCDateTime",
+                NULL
+            );
+            xmlNodePtr cameraTime = xmlNewTextChild(
+                utcDateTime, ns_tt, BAD_CAST "Time", NULL
+            );
+            xmlNewTextChild(
+                cameraTime, ns_tt, BAD_CAST "Hour", BAD_CAST hour_buf
+            );
+            xmlNewTextChild(
+                cameraTime, ns_tt, BAD_CAST "Minute",
+                BAD_CAST minute_buf
+            );
+            xmlNewTextChild(
+                cameraTime, ns_tt, BAD_CAST "Second",
+                BAD_CAST second_buf
+            );
+            xmlNodePtr cameraDate = xmlNewTextChild(
+                utcDateTime, ns_tt, BAD_CAST "Date", NULL
+            );
+            xmlNewTextChild(
+                cameraDate, ns_tt, BAD_CAST "Year", BAD_CAST year_buf
+            );
+            xmlNewTextChild(
+                cameraDate, ns_tt, BAD_CAST "Month", BAD_CAST month_buf
+            );
+            xmlNewTextChild(
+                cameraDate, ns_tt, BAD_CAST "Day", BAD_CAST day_buf
+            );
+            char cmd[4096] = { 0 };
+            addHttpHeader(
+                doc, root, onvif_data->xaddrs,
+                onvif_data->device_service, cmd, 4096
+            );
+            xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
+            if (reply != NULL) {
+                result = checkForXmlErrorMsg(
+                    reply, onvif_data->last_error
+                );
+                xmlFreeDoc(reply);
+            } else {
+                result = -1;
+                strcpy(
+                    onvif_data->last_error,
+                    "setSystemDateAndTimeUsingTimezone - No XML "
+                    "reply"
+                );
+            }
         }
+    } else {
+        result = -1;
+        strcpy(
+            onvif_data->last_error,
+            "setSystemDateAndTimeUsingTimezone 2 - No XML reply"
+        );
+    }
     return result;
 }
 
-int getProfileToken(struct OnvifData *onvif_data, int profileIndex)
+int getProfileToken(struct OnvifData* onvif_data, int profileIndex)
 {
     int result = 0;
     // onvif_data->profileToken[0] = 0;
@@ -2814,26 +2647,24 @@ int getProfileToken(struct OnvifData *onvif_data, int profileIndex)
         doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            getNodeAttributen(
-                reply,
-                BAD_CAST "//s:Body//trt:GetProfilesResponse//trt:Profiles",
-                BAD_CAST "token", onvif_data->profileToken, 128, profileIndex
-            );
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " getProfileToken");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "getProfileToken - No XML reply");
-        }
+    if (reply != NULL) {
+        getNodeAttributen(
+            reply,
+            BAD_CAST "//s:Body//trt:GetProfilesResponse//trt:Profiles",
+            BAD_CAST "token", onvif_data->profileToken, 128, profileIndex
+        );
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getProfileToken");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "getProfileToken - No XML reply");
+    }
     return result;
 }
 
-int getTimeOffset(struct OnvifData *onvif_data)
+int getTimeOffset(struct OnvifData* onvif_data)
 {
     memset(onvif_data->timezone, 0, sizeof(onvif_data->timezone));
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
@@ -2858,132 +2689,129 @@ int getTimeOffset(struct OnvifData *onvif_data)
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
 
-    if (reply != NULL)
-        {
-            char hour_buf[16] = { 0 };
-            char min_buf[16] = { 0 };
-            char sec_buf[16] = { 0 };
-            char year_buf[16] = { 0 };
-            char month_buf[16] = { 0 };
-            char day_buf[16] = { 0 };
-            char dst_buf[16] = { 0 };
-            getXmlValue(
-                reply,
-                BAD_CAST
-                "//s:Body//tds:GetSystemDateAndTimeResponse//"
-                "tds:SystemDateAndTime//tt:UTCDateTime//tt:Time//tt:Hour",
-                hour_buf, 16
-            );
-            getXmlValue(
-                reply,
-                BAD_CAST
-                "//s:Body//tds:GetSystemDateAndTimeResponse//"
-                "tds:SystemDateAndTime//tt:UTCDateTime//tt:Time//tt:Minute",
-                min_buf, 16
-            );
-            getXmlValue(
-                reply,
-                BAD_CAST
-                "//s:Body//tds:GetSystemDateAndTimeResponse//"
-                "tds:SystemDateAndTime//tt:UTCDateTime//tt:Time//tt:Second",
-                sec_buf, 16
-            );
-            getXmlValue(
-                reply,
-                BAD_CAST
-                "//s:Body//tds:GetSystemDateAndTimeResponse//"
-                "tds:SystemDateAndTime//tt:UTCDateTime//tt:Date//tt:Year",
-                year_buf, 16
-            );
-            getXmlValue(
-                reply,
-                BAD_CAST
-                "//s:Body//tds:GetSystemDateAndTimeResponse//"
-                "tds:SystemDateAndTime//tt:UTCDateTime//tt:Date//tt:Month",
-                month_buf, 16
-            );
-            getXmlValue(
-                reply,
-                BAD_CAST
-                "//s:Body//tds:GetSystemDateAndTimeResponse//"
-                "tds:SystemDateAndTime//tt:UTCDateTime//tt:Date//tt:Day",
-                day_buf, 16
-            );
-            getXmlValue(
-                reply,
-                BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//"
-                         "tds:SystemDateAndTime//tt:DaylightSavings",
-                dst_buf, 16
-            );
+    if (reply != NULL) {
+        char hour_buf[16] = { 0 };
+        char min_buf[16] = { 0 };
+        char sec_buf[16] = { 0 };
+        char year_buf[16] = { 0 };
+        char month_buf[16] = { 0 };
+        char day_buf[16] = { 0 };
+        char dst_buf[16] = { 0 };
+        getXmlValue(
+            reply,
+            BAD_CAST
+            "//s:Body//tds:GetSystemDateAndTimeResponse//"
+            "tds:SystemDateAndTime//tt:UTCDateTime//tt:Time//tt:Hour",
+            hour_buf, 16
+        );
+        getXmlValue(
+            reply,
+            BAD_CAST
+            "//s:Body//tds:GetSystemDateAndTimeResponse//"
+            "tds:SystemDateAndTime//tt:UTCDateTime//tt:Time//tt:Minute",
+            min_buf, 16
+        );
+        getXmlValue(
+            reply,
+            BAD_CAST
+            "//s:Body//tds:GetSystemDateAndTimeResponse//"
+            "tds:SystemDateAndTime//tt:UTCDateTime//tt:Time//tt:Second",
+            sec_buf, 16
+        );
+        getXmlValue(
+            reply,
+            BAD_CAST
+            "//s:Body//tds:GetSystemDateAndTimeResponse//"
+            "tds:SystemDateAndTime//tt:UTCDateTime//tt:Date//tt:Year",
+            year_buf, 16
+        );
+        getXmlValue(
+            reply,
+            BAD_CAST
+            "//s:Body//tds:GetSystemDateAndTimeResponse//"
+            "tds:SystemDateAndTime//tt:UTCDateTime//tt:Date//tt:Month",
+            month_buf, 16
+        );
+        getXmlValue(
+            reply,
+            BAD_CAST
+            "//s:Body//tds:GetSystemDateAndTimeResponse//"
+            "tds:SystemDateAndTime//tt:UTCDateTime//tt:Date//tt:Day",
+            day_buf, 16
+        );
+        getXmlValue(
+            reply,
+            BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//"
+                     "tds:SystemDateAndTime//tt:DaylightSavings",
+            dst_buf, 16
+        );
 
-            onvif_data->dst = false;
-            int is_dst = 0;
-            if (strcmp(dst_buf, "true") == 0)
-                {
-                    is_dst = 1;
-                    onvif_data->dst = true;
-                }
+        onvif_data->dst = false;
+        int is_dst = 0;
+        if (strcmp(dst_buf, "true") == 0) {
+            is_dst = 1;
+            onvif_data->dst = true;
+        }
 
-            getXmlValue(
-                reply,
-                BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//"
-                         "tds:SystemDateAndTime//tt:TimeZone//tt:TZ",
-                onvif_data->timezone, 128
-            );
-            char dttype[16] = { 0 };
-            getXmlValue(
-                reply,
-                BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//"
-                         "tds:SystemDateAndTime//tt:DateTimeType",
-                dttype, 16
-            );
-            onvif_data->datetimetype = dttype[0]; /* M == Manual, N == NTP */
+        getXmlValue(
+            reply,
+            BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//"
+                     "tds:SystemDateAndTime//tt:TimeZone//tt:TZ",
+            onvif_data->timezone, 128
+        );
+        char dttype[16] = { 0 };
+        getXmlValue(
+            reply,
+            BAD_CAST "//s:Body//tds:GetSystemDateAndTimeResponse//"
+                     "tds:SystemDateAndTime//tt:DateTimeType",
+            dttype, 16
+        );
+        onvif_data->datetimetype = dttype[0]; /* M == Manual, N == NTP */
 
-            time_t now = time(NULL);
-            time_t utc_time_here = now;
+        time_t now = time(NULL);
+        time_t utc_time_here = now;
 
-            /*
-                bool special = false;
-                if (strcmp(onvif_data->timezone,"UTC0") == 0) {
-                    // special case - camera is running on local time believing
-               it is UTC special = true; struct tm *utc_here = gmtime(&now);
-                utc_here->tm_isdst = -1;
-                utc_time_here = mktime(utc_here);
-                }
-            */
+        /*
+            bool special = false;
+            if (strcmp(onvif_data->timezone,"UTC0") == 0) {
+                // special case - camera is running on local time believing
+           it is UTC special = true; struct tm *utc_here = gmtime(&now);
+            utc_here->tm_isdst = -1;
+            utc_time_here = mktime(utc_here);
+            }
+        */
 
-            struct tm *utc_there = localtime(&now);
-            utc_there->tm_year = atoi(year_buf) - 1900;
-            utc_there->tm_mon = atoi(month_buf) - 1;
-            utc_there->tm_mday = atoi(day_buf);
-            utc_there->tm_hour = atoi(hour_buf);
-            utc_there->tm_min = atoi(min_buf);
-            utc_there->tm_sec = atoi(sec_buf);
-            utc_there->tm_isdst = is_dst;
-            time_t utc_time_there;
-            // if (special)
-            //     utc_time_there = mktime(utc_there);
-            // else
+        struct tm* utc_there = localtime(&now);
+        utc_there->tm_year = atoi(year_buf) - 1900;
+        utc_there->tm_mon = atoi(month_buf) - 1;
+        utc_there->tm_mday = atoi(day_buf);
+        utc_there->tm_hour = atoi(hour_buf);
+        utc_there->tm_min = atoi(min_buf);
+        utc_there->tm_sec = atoi(sec_buf);
+        utc_there->tm_isdst = is_dst;
+        time_t utc_time_there;
+        // if (special)
+        //     utc_time_there = mktime(utc_there);
+        // else
 #ifndef _WIN32
-            utc_time_there = timegm(utc_there);
+        utc_time_there = timegm(utc_there);
 #else
-            utc_time_there = _mkgmtime(utc_there);
+        utc_time_there = _mkgmtime(utc_there);
 #endif
-            onvif_data->time_offset = utc_time_there - utc_time_here;
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " getTimeOffset");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "getTimeOffset - No XML reply");
-        }
+        onvif_data->time_offset = utc_time_there - utc_time_here;
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getTimeOffset");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "getTimeOffset - No XML reply");
+    }
 
     return result;
 }
 
-int getStreamUri(struct OnvifData *onvif_data)
+int getStreamUri(struct OnvifData* onvif_data)
 {
     memset(onvif_data->stream_uri, 0, sizeof(onvif_data->stream_uri));
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
@@ -3007,15 +2835,12 @@ int getStreamUri(struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr getStreamUri =
-        xmlNewTextChild(body, ns_trt, BAD_CAST "GetStreamUri", NULL);
-    xmlNodePtr streamSetup =
-        xmlNewTextChild(getStreamUri, ns_trt, BAD_CAST "StreamSetup", NULL);
+    xmlNodePtr getStreamUri = xmlNewTextChild(body, ns_trt, BAD_CAST "GetStreamUri", NULL);
+    xmlNodePtr streamSetup = xmlNewTextChild(getStreamUri, ns_trt, BAD_CAST "StreamSetup", NULL);
     xmlNewTextChild(
         streamSetup, ns_tt, BAD_CAST "Stream", BAD_CAST "RTP-Unicast"
     );
-    xmlNodePtr transport =
-        xmlNewTextChild(streamSetup, ns_tt, BAD_CAST "Transport", NULL);
+    xmlNodePtr transport = xmlNewTextChild(streamSetup, ns_tt, BAD_CAST "Transport", NULL);
     xmlNewTextChild(transport, ns_tt, BAD_CAST "Protocol", BAD_CAST "RTSP");
     xmlNewTextChild(
         getStreamUri, ns_trt, BAD_CAST "ProfileToken",
@@ -3026,27 +2851,25 @@ int getStreamUri(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            getXmlValue(
-                reply,
-                BAD_CAST
-                "//s:Body//trt:GetStreamUriResponse//trt:MediaUri//tt:Uri",
-                onvif_data->stream_uri, 1024
-            );
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " getStreamUri");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "getStreamUri - No XML reply");
-        }
+    if (reply != NULL) {
+        getXmlValue(
+            reply,
+            BAD_CAST
+            "//s:Body//trt:GetStreamUriResponse//trt:MediaUri//tt:Uri",
+            onvif_data->stream_uri, 1024
+        );
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getStreamUri");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "getStreamUri - No XML reply");
+    }
     return result;
 }
 
-int getSnapshotUri(struct OnvifData *onvif_data)
+int getSnapshotUri(struct OnvifData* onvif_data)
 {
     memset(onvif_data->snapshot_uri, 0, sizeof(onvif_data->snapshot_uri));
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
@@ -3070,15 +2893,12 @@ int getSnapshotUri(struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr getSnapshotUri =
-        xmlNewTextChild(body, ns_trt, BAD_CAST "GetSnapshotUri", NULL);
-    xmlNodePtr streamSetup =
-        xmlNewTextChild(getSnapshotUri, ns_trt, BAD_CAST "StreamSetup", NULL);
+    xmlNodePtr getSnapshotUri = xmlNewTextChild(body, ns_trt, BAD_CAST "GetSnapshotUri", NULL);
+    xmlNodePtr streamSetup = xmlNewTextChild(getSnapshotUri, ns_trt, BAD_CAST "StreamSetup", NULL);
     xmlNewTextChild(
         streamSetup, ns_tt, BAD_CAST "Stream", BAD_CAST "RTP-Unicast"
     );
-    xmlNodePtr transport =
-        xmlNewTextChild(streamSetup, ns_tt, BAD_CAST "Transport", NULL);
+    xmlNodePtr transport = xmlNewTextChild(streamSetup, ns_tt, BAD_CAST "Transport", NULL);
     xmlNewTextChild(transport, ns_tt, BAD_CAST "Protocol", BAD_CAST "RTSP");
     xmlNewTextChild(
         getSnapshotUri, ns_trt, BAD_CAST "ProfileToken",
@@ -3089,27 +2909,25 @@ int getSnapshotUri(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            getXmlValue(
-                reply,
-                BAD_CAST
-                "//s:Body//trt:GetSnapshotUriResponse//trt:MediaUri//tt:Uri",
-                onvif_data->snapshot_uri, 1024
-            );
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " getSnapshotUri");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "getSnapshotUri - No XML reply");
-        }
+    if (reply != NULL) {
+        getXmlValue(
+            reply,
+            BAD_CAST
+            "//s:Body//trt:GetSnapshotUriResponse//trt:MediaUri//tt:Uri",
+            onvif_data->snapshot_uri, 1024
+        );
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getSnapshotUri");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "getSnapshotUri - No XML reply");
+    }
     return result;
 }
 
-int getDeviceInformation(struct OnvifData *onvif_data)
+int getDeviceInformation(struct OnvifData* onvif_data)
 {
     memset(onvif_data->serial_number, 0, sizeof(onvif_data->serial_number));
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
@@ -3136,46 +2954,42 @@ int getDeviceInformation(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            getXmlValue(
-                reply,
-                BAD_CAST
-                "//s:Body//tds:GetDeviceInformationResponse//tds:SerialNumber",
-                onvif_data->serial_number, 128
-            );
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0)
-                strcat(onvif_data->last_error, " getdeviceInformation");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(
-                onvif_data->last_error, "getDeviceInformation - No XML reply"
-            );
-        }
+    if (reply != NULL) {
+        getXmlValue(
+            reply,
+            BAD_CAST
+            "//s:Body//tds:GetDeviceInformationResponse//tds:SerialNumber",
+            onvif_data->serial_number, 128
+        );
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " getdeviceInformation");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(
+            onvif_data->last_error, "getDeviceInformation - No XML reply"
+        );
+    }
     return result;
 }
 
 void getDiscoveryXml2(char buffer[], int buf_size)
 {
-    char *xml_string =
-        "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\" "
-        "xmlns:a=\"http://schemas.xmlsoap.org/ws/2004/08/"
-        "addressing\"><s:Header><a:Action "
-        "s:mustUnderstand=\"1\">http://schemas.xmlsoap.org/ws/2005/04/"
-        "discovery/Probe</"
-        "a:Action><a:MessageID>uuid:6bbdae2d-f229-42c8-a27b-93880fb80826</"
-        "a:MessageID><a:ReplyTo><a:Address>http://schemas.xmlsoap.org/ws/2004/"
-        "08/addressing/role/anonymous</a:Address></a:ReplyTo><a:To "
-        "s:mustUnderstand=\"1\">urn:schemas-xmlsoap-org:ws:2005:04:discovery</"
-        "a:To></s:Header><s:Body><Probe "
-        "xmlns=\"http://schemas.xmlsoap.org/ws/2005/04/discovery\"><d:Types "
-        "xmlns:d=\"http://schemas.xmlsoap.org/ws/2005/04/discovery\" "
-        "xmlns:dp0=\"http://www.onvif.org/ver10/device/wsdl\">dp0:Device</"
-        "d:Types></Probe></s:Body></s:Envelope>";
+    char* xml_string = "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\" "
+                       "xmlns:a=\"http://schemas.xmlsoap.org/ws/2004/08/"
+                       "addressing\"><s:Header><a:Action "
+                       "s:mustUnderstand=\"1\">http://schemas.xmlsoap.org/ws/2005/04/"
+                       "discovery/Probe</"
+                       "a:Action><a:MessageID>uuid:6bbdae2d-f229-42c8-a27b-93880fb80826</"
+                       "a:MessageID><a:ReplyTo><a:Address>http://schemas.xmlsoap.org/ws/2004/"
+                       "08/addressing/role/anonymous</a:Address></a:ReplyTo><a:To "
+                       "s:mustUnderstand=\"1\">urn:schemas-xmlsoap-org:ws:2005:04:discovery</"
+                       "a:To></s:Header><s:Body><Probe "
+                       "xmlns=\"http://schemas.xmlsoap.org/ws/2005/04/discovery\"><d:Types "
+                       "xmlns:d=\"http://schemas.xmlsoap.org/ws/2005/04/discovery\" "
+                       "xmlns:dp0=\"http://www.onvif.org/ver10/device/wsdl\">dp0:Device</"
+                       "d:Types></Probe></s:Body></s:Envelope>";
     strcpy(buffer, xml_string);
 }
 
@@ -3203,10 +3017,8 @@ void getDiscoveryXml(char buffer[], int buf_size, char uuid[47])
         BAD_CAST "http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe"
     );
     xmlNewProp(action, BAD_CAST "SOAP-ENV:mustUnderstand", BAD_CAST "1");
-    xmlNodePtr messageid =
-        xmlNewTextChild(header, ns_a, BAD_CAST "MessageID", BAD_CAST uuid);
-    xmlNodePtr replyto =
-        xmlNewTextChild(header, ns_a, BAD_CAST "ReplyTo", NULL);
+    xmlNodePtr messageid = xmlNewTextChild(header, ns_a, BAD_CAST "MessageID", BAD_CAST uuid);
+    xmlNodePtr replyto = xmlNewTextChild(header, ns_a, BAD_CAST "ReplyTo", NULL);
     xmlNodePtr address = xmlNewTextChild(
         replyto, ns_a, BAD_CAST "Address",
         BAD_CAST
@@ -3241,13 +3053,13 @@ void getDiscoveryXml(char buffer[], int buf_size, char uuid[47])
     xmlOutputBufferPtr outputbuffer = xmlAllocOutputBuffer(NULL);
     xmlNodeDumpOutput(outputbuffer, doc, root, 0, 0, NULL);
     int size = xmlOutputBufferGetSize(outputbuffer);
-    strcpy(buffer, (char *)xmlOutputBufferGetContent(outputbuffer));
+    strcpy(buffer, (char*)xmlOutputBufferGetContent(outputbuffer));
     xmlOutputBufferFlush(outputbuffer);
     xmlOutputBufferClose(outputbuffer);
     xmlFreeDoc(doc);
 }
 
-int rebootCamera(struct OnvifData *onvif_data)
+int rebootCamera(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -3273,21 +3085,19 @@ int rebootCamera(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " rebootCamera");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "rebootCamera - No XML reply");
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " rebootCamera");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "rebootCamera - No XML reply");
+    }
     return result;
 }
 
-int hardReset(struct OnvifData *onvif_data)
+int hardReset(struct OnvifData* onvif_data)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
@@ -3307,8 +3117,7 @@ int hardReset(struct OnvifData *onvif_data)
         onvif_data->time_offset
     );
     xmlNodePtr body = xmlNewTextChild(root, ns_env, BAD_CAST "Body", NULL);
-    xmlNodePtr setSystemFactoryDefault =
-        xmlNewTextChild(body, ns_tds, BAD_CAST "SetSystemFactoryDefault", NULL);
+    xmlNodePtr setSystemFactoryDefault = xmlNewTextChild(body, ns_tds, BAD_CAST "SetSystemFactoryDefault", NULL);
     xmlNewTextChild(
         setSystemFactoryDefault, ns_tds, BAD_CAST "FactoryDefault",
         BAD_CAST "Hard"
@@ -3318,21 +3127,19 @@ int hardReset(struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            result = checkForXmlErrorMsg(reply, onvif_data->last_error);
-            if (result < 0) strcat(onvif_data->last_error, " hardReset");
-            xmlFreeDoc(reply);
-        }
-    else
-        {
-            result = -1;
-            strcpy(onvif_data->last_error, "hardReset - No XML reply");
-        }
+    if (reply != NULL) {
+        result = checkForXmlErrorMsg(reply, onvif_data->last_error);
+        if (result < 0)
+            strcat(onvif_data->last_error, " hardReset");
+        xmlFreeDoc(reply);
+    } else {
+        result = -1;
+        strcpy(onvif_data->last_error, "hardReset - No XML reply");
+    }
     return result;
 }
 
-void saveSystemDateAndTime(char *filename, struct OnvifData *onvif_data)
+void saveSystemDateAndTime(char* filename, struct OnvifData* onvif_data)
 {
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
@@ -3356,14 +3163,13 @@ void saveSystemDateAndTime(char *filename, struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlSaveFormatFile(filename, reply, 1);
-            xmlFreeDoc(reply);
-        }
+    if (reply != NULL) {
+        xmlSaveFormatFile(filename, reply, 1);
+        xmlFreeDoc(reply);
+    }
 }
 
-void saveScopes(char *filename, struct OnvifData *onvif_data)
+void saveScopes(char* filename, struct OnvifData* onvif_data)
 {
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
@@ -3387,14 +3193,13 @@ void saveScopes(char *filename, struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlSaveFormatFile(filename, reply, 1);
-            xmlFreeDoc(reply);
-        }
+    if (reply != NULL) {
+        xmlSaveFormatFile(filename, reply, 1);
+        xmlFreeDoc(reply);
+    }
 }
 
-void saveDeviceInformation(char *filename, struct OnvifData *onvif_data)
+void saveDeviceInformation(char* filename, struct OnvifData* onvif_data)
 {
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
@@ -3418,14 +3223,13 @@ void saveDeviceInformation(char *filename, struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlSaveFormatFile(filename, reply, 1);
-            xmlFreeDoc(reply);
-        }
+    if (reply != NULL) {
+        xmlSaveFormatFile(filename, reply, 1);
+        xmlFreeDoc(reply);
+    }
 }
 
-void saveCapabilities(char *filename, struct OnvifData *onvif_data)
+void saveCapabilities(char* filename, struct OnvifData* onvif_data)
 {
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
@@ -3449,14 +3253,13 @@ void saveCapabilities(char *filename, struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->device_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlSaveFormatFile(filename, reply, 1);
-            xmlFreeDoc(reply);
-        }
+    if (reply != NULL) {
+        xmlSaveFormatFile(filename, reply, 1);
+        xmlFreeDoc(reply);
+    }
 }
 
-void saveProfiles(char *filename, struct OnvifData *onvif_data)
+void saveProfiles(char* filename, struct OnvifData* onvif_data)
 {
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
@@ -3480,14 +3283,13 @@ void saveProfiles(char *filename, struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlSaveFormatFile(filename, reply, 1);
-            xmlFreeDoc(reply);
-        }
+    if (reply != NULL) {
+        xmlSaveFormatFile(filename, reply, 1);
+        xmlFreeDoc(reply);
+    }
 }
 
-void saveServiceCapabilities(char *filename, struct OnvifData *onvif_data)
+void saveServiceCapabilities(char* filename, struct OnvifData* onvif_data)
 {
     xmlDocPtr doc = xmlNewDoc(BAD_CAST "1.0");
     xmlNodePtr root = xmlNewDocNode(doc, NULL, BAD_CAST "Envelope", NULL);
@@ -3511,18 +3313,18 @@ void saveServiceCapabilities(char *filename, struct OnvifData *onvif_data)
         doc, root, onvif_data->xaddrs, onvif_data->media_service, cmd, 4096
     );
     xmlDocPtr reply = sendCommandToCamera(cmd, onvif_data->xaddrs);
-    if (reply != NULL)
-        {
-            xmlSaveFormatFile(filename, reply, 1);
-            xmlFreeDoc(reply);
-        }
+    if (reply != NULL) {
+        xmlSaveFormatFile(filename, reply, 1);
+        xmlFreeDoc(reply);
+    }
 }
 
-int getXmlValue(xmlDocPtr doc, xmlChar *xpath, char buf[], int buf_length)
+int getXmlValue(xmlDocPtr doc, xmlChar* xpath, char buf[], int buf_length)
 {
     xmlXPathContextPtr context = xmlXPathNewContext(doc);
 
-    if (!context) return -1;
+    if (!context)
+        return -1;
 
     xmlXPathRegisterNs(
         context, BAD_CAST "s",
@@ -3565,44 +3367,44 @@ int getXmlValue(xmlDocPtr doc, xmlChar *xpath, char buf[], int buf_length)
     xmlXPathObjectPtr result = xmlXPathEvalExpression(xpath, context);
     xmlXPathFreeContext(context);
 
-    if (!result) return -2;
+    if (!result)
+        return -2;
 
-    if (xmlXPathNodeSetIsEmpty(result->nodesetval))
-        {
-            if ((strcmp(
-                     (char *)xpath,
-                     "//s:Body//s:Fault//s:Code//s:Subcode//s:Value"
-                 ) != 0) &&
-                (strcmp((char *)xpath, "//s:Body//s:Fault//s:Reason//s:Text") !=
-                 0))
-                {
-                }
-            xmlXPathFreeObject(result);
-            return -3;
+    if (xmlXPathNodeSetIsEmpty(result->nodesetval)) {
+        if ((strcmp(
+                 (char*)xpath,
+                 "//s:Body//s:Fault//s:Code//s:Subcode//s:Value"
+             )
+             != 0)
+            && (strcmp((char*)xpath, "//s:Body//s:Fault//s:Reason//s:Text") != 0)) {
         }
+        xmlXPathFreeObject(result);
+        return -3;
+    }
 
-    xmlChar *keyword = xmlNodeListGetString(
+    xmlChar* keyword = xmlNodeListGetString(
         doc, result->nodesetval->nodeTab[0]->xmlChildrenNode, 1
     );
-    if (keyword)
-        {
-            memset(buf, 0, buf_length);
-            strncpy(buf, (char *)keyword, buf_length);
-            xmlFree(keyword);
-        }
+    if (keyword) {
+        memset(buf, 0, buf_length);
+        strncpy(buf, (char*)keyword, buf_length);
+        xmlFree(keyword);
+    }
 
     xmlXPathFreeObject(result);
     return 0;
 }
 
 int getNodeAttributen(
-    xmlDocPtr doc, xmlChar *xpath, xmlChar *attribute, char buf[],
+    xmlDocPtr doc, xmlChar* xpath, xmlChar* attribute, char buf[],
     int buf_length, int profileIndex
 )
 {
-    xmlChar *keyword = NULL;
+    xmlChar* keyword = NULL;
     xmlXPathContextPtr context = xmlXPathNewContext(doc);
-    if (context == NULL) { return -1; }
+    if (context == NULL) {
+        return -1;
+    }
     xmlXPathRegisterNs(
         context, BAD_CAST "s",
         BAD_CAST "http://www.w3.org/2003/05/soap-envelope"
@@ -3639,49 +3441,50 @@ int getNodeAttributen(
 
     xmlXPathObjectPtr result = xmlXPathEvalExpression(xpath, context);
     xmlXPathFreeContext(context);
-    if (result == NULL) { return -2; }
+    if (result == NULL) {
+        return -2;
+    }
 
-    if (xmlXPathNodeSetIsEmpty(result->nodesetval))
-        {
-            if (result) xmlXPathFreeObject(result);
-            return -3;
+    if (xmlXPathNodeSetIsEmpty(result->nodesetval)) {
+        if (result)
+            xmlXPathFreeObject(result);
+        return -3;
+    }
+
+    if (result) {
+        if (profileIndex >= result->nodesetval->nodeNr)
+            return -5;
+
+        keyword = xmlGetProp(
+            result->nodesetval->nodeTab[profileIndex], attribute
+        );
+        if (keyword != NULL) {
+            if (strlen((char*)keyword) > buf_length - 1) {
+                xmlXPathFreeObject(result);
+                xmlFree(keyword);
+                return -4;
+            } else {
+                for (int i = 0; i < buf_length; i++) buf[i] = '\0';
+                strcpy(buf, (char*)keyword);
+            }
         }
-
-    if (result)
-        {
-            if (profileIndex >= result->nodesetval->nodeNr) return -5;
-
-            keyword = xmlGetProp(
-                result->nodesetval->nodeTab[profileIndex], attribute
-            );
-            if (keyword != NULL)
-                {
-                    if (strlen((char *)keyword) > buf_length - 1)
-                        {
-                            xmlXPathFreeObject(result);
-                            xmlFree(keyword);
-                            return -4;
-                        }
-                    else
-                        {
-                            for (int i = 0; i < buf_length; i++) buf[i] = '\0';
-                            strcpy(buf, (char *)keyword);
-                        }
-                }
-        }
+    }
 
     xmlXPathFreeObject(result);
-    if (keyword != NULL) xmlFree(keyword);
+    if (keyword != NULL)
+        xmlFree(keyword);
     return 0;
 }
 
-xmlXPathObjectPtr getNodeSet(xmlDocPtr doc, xmlChar *xpath)
+xmlXPathObjectPtr getNodeSet(xmlDocPtr doc, xmlChar* xpath)
 {
     xmlXPathContextPtr context;
     xmlXPathObjectPtr result;
 
     context = xmlXPathNewContext(doc);
-    if (context == NULL) { return NULL; }
+    if (context == NULL) {
+        return NULL;
+    }
     xmlXPathRegisterNs(
         context, BAD_CAST "s",
         BAD_CAST "http://www.w3.org/2003/05/soap-envelope"
@@ -3711,16 +3514,18 @@ xmlXPathObjectPtr getNodeSet(xmlDocPtr doc, xmlChar *xpath)
 
     result = xmlXPathEvalExpression(xpath, context);
     xmlXPathFreeContext(context);
-    if (result == NULL) { return NULL; }
-    if (xmlXPathNodeSetIsEmpty(result->nodesetval))
-        {
-            if (result) xmlXPathFreeObject(result);
-            return NULL;
-        }
+    if (result == NULL) {
+        return NULL;
+    }
+    if (xmlXPathNodeSetIsEmpty(result->nodesetval)) {
+        if (result)
+            xmlXPathFreeObject(result);
+        return NULL;
+    }
     return result;
 }
 
-xmlDocPtr sendCommandToCamera(char *cmd, char *xaddrs)
+xmlDocPtr sendCommandToCamera(char* cmd, char* xaddrs)
 {
     int sock = 0, valread, flags;
     const int buffer_size = 4096;
@@ -3728,42 +3533,42 @@ xmlDocPtr sendCommandToCamera(char *cmd, char *xaddrs)
     char buffer[4096] = { 0 };
 
     char tmp[128] = { 0 };
-    char *mark = strstr(xaddrs, "//");
+    char* mark = strstr(xaddrs, "//");
     int start = mark - xaddrs + 2;
     int tmp_len = strlen(xaddrs);
     int j;
-    for (j = 0; j < tmp_len - start; j++)
-        {
-            if (j < 128) tmp[j] = xaddrs[j + start];
-        }
+    for (j = 0; j < tmp_len - start; j++) {
+        if (j < 128)
+            tmp[j] = xaddrs[j + start];
+    }
     tmp[j] = '\0';
 
     mark = strstr(tmp, "/");
     int end = mark - tmp;
     char tmp2[128] = { 0 };
-    for (j = 0; j < end; j++) { tmp2[j] = tmp[j]; }
+    for (j = 0; j < end; j++) {
+        tmp2[j] = tmp[j];
+    }
     tmp2[j] = '\0';
 
     char host[128] = { 0 };
     char port_buf[128] = { 0 };
     mark = strstr(tmp2, ":");
-    if (mark == NULL)
-        {
-            strcpy(host, tmp2);
-            strcpy(port_buf, "80");
+    if (mark == NULL) {
+        strcpy(host, tmp2);
+        strcpy(port_buf, "80");
+    } else {
+        start = mark - tmp2;
+        for (j = 0; j < start; j++) {
+            host[j] = tmp2[j];
         }
-    else
-        {
-            start = mark - tmp2;
-            for (j = 0; j < start; j++) { host[j] = tmp2[j]; }
-            host[j] = '\0';
-            tmp_len = strlen(tmp2);
-            for (j = start + 1; j < tmp_len; j++)
-                {
-                    port_buf[j - (start + 1)] = tmp2[j];
-                }
-            port_buf[j - (start + 1)] = '\0';
+        host[j] = '\0';
+        tmp_len = strlen(tmp2);
+        for (j = start + 1; j < tmp_len; j++) {
+            port_buf[j - (start + 1)] = tmp2[j];
         }
+        port_buf[j - (start + 1)] = '\0';
+    }
 
     int port = atoi(port_buf);
 
@@ -3772,32 +3577,32 @@ xmlDocPtr sendCommandToCamera(char *cmd, char *xaddrs)
     WSAStartup(MAKEWORD(2, 2), &wsaData);
 #endif
 
-    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) { return NULL; }
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        return NULL;
+    }
 
     memset(&serv_addr, '0', sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
     serv_addr.sin_addr.s_addr = inet_addr(host);
 
-    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-        {
-            xmlDocPtr doc = NULL;
-            xmlNodePtr root_node = NULL;
-            doc = xmlNewDoc(BAD_CAST "1.0");
-            root_node = xmlNewNode(NULL, BAD_CAST "root");
-            xmlDocSetRootElement(doc, root_node);
-            xmlNewChild(
-                root_node, NULL, BAD_CAST "error",
-                BAD_CAST "Network error, unable to connect"
-            );
-            return doc;
-        }
+    if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+        xmlDocPtr doc = NULL;
+        xmlNodePtr root_node = NULL;
+        doc = xmlNewDoc(BAD_CAST "1.0");
+        root_node = xmlNewNode(NULL, BAD_CAST "root");
+        xmlDocSetRootElement(doc, root_node);
+        xmlNewChild(
+            root_node, NULL, BAD_CAST "error",
+            BAD_CAST "Network error, unable to connect"
+        );
+        return doc;
+    }
 
-    if (send(sock, cmd, strlen(cmd), 0) < 0)
-        {
-            printf("SEND ERROR %s\n", xaddrs);
-            return NULL;
-        }
+    if (send(sock, cmd, strlen(cmd), 0) < 0) {
+        printf("SEND ERROR %s\n", xaddrs);
+        return NULL;
+    }
 
     char http_terminate[5];
     http_terminate[0] = '\r';
@@ -3809,60 +3614,66 @@ xmlDocPtr sendCommandToCamera(char *cmd, char *xaddrs)
     int loop = 10;
     valread = 0;
 
-    while (loop-- > 0)
-        {
-            int nvalread = recv(sock, buffer + valread, 4096 - 1 - valread, 0);
-            if (nvalread <= 0) { break; }
-            valread += nvalread;
-
-            char *substr = strstr(buffer, http_terminate);
-            if (substr) { break; }
+    while (loop-- > 0) {
+        int nvalread = recv(sock, buffer + valread, 4096 - 1 - valread, 0);
+        if (nvalread <= 0) {
+            break;
         }
+        valread += nvalread;
 
-    char *substr = strstr(buffer, http_terminate);
-    if (substr == NULL) return NULL;
+        char* substr = strstr(buffer, http_terminate);
+        if (substr) {
+            break;
+        }
+    }
+
+    char* substr = strstr(buffer, http_terminate);
+    if (substr == NULL)
+        return NULL;
 
     int i;
     int xml_start = substr - buffer + 4;
-    if (xml_start > 1024) return NULL;
+    if (xml_start > 1024)
+        return NULL;
     char http_header[1024];
-    for (i = 0; i < xml_start; i++) { http_header[i] = buffer[i]; }
+    for (i = 0; i < xml_start; i++) {
+        http_header[i] = buffer[i];
+    }
     http_header[xml_start] = '\0';
 
     substr = strstr(http_header, "Content-Length: ");
-    if (substr == NULL) return NULL;
+    if (substr == NULL)
+        return NULL;
 
     int length_start = substr - http_header + 16;
-    if ((xml_start - length_start) > 1024) return NULL;
+    if ((xml_start - length_start) > 1024)
+        return NULL;
     char str_xml_length[1024];
-    for (i = length_start; i < xml_start; i++)
-        {
-            if (http_header[i] == '\r' && http_header[i + 1] == '\n')
-                {
-                    str_xml_length[i - length_start] = '\0';
-                    break;
-                }
-            else { str_xml_length[i - length_start] = http_header[i]; }
+    for (i = length_start; i < xml_start; i++) {
+        if (http_header[i] == '\r' && http_header[i + 1] == '\n') {
+            str_xml_length[i - length_start] = '\0';
+            break;
+        } else {
+            str_xml_length[i - length_start] = http_header[i];
         }
-    int xml_length = (int)strtol(str_xml_length, (char **)NULL, 10);
-    if (xml_length > 65536) return NULL;
+    }
+    int xml_length = (int)strtol(str_xml_length, (char**)NULL, 10);
+    if (xml_length > 65536)
+        return NULL;
     char xml_reply[65536];
 
-    for (i = 0; i < valread - xml_start; i++)
-        {
-            xml_reply[i] = buffer[i + xml_start];
-        }
+    for (i = 0; i < valread - xml_start; i++) {
+        xml_reply[i] = buffer[i + xml_start];
+    }
 
     int cumulative_read = valread - xml_start;
-    while (cumulative_read < xml_length)
-        {
-            valread = recv(sock, buffer, buffer_size, 0);
-            for (i = 0; i < valread; i++)
-                {
-                    xml_reply[i + cumulative_read] = buffer[i];
-                }
-            cumulative_read = cumulative_read + valread;
+    while (cumulative_read < xml_length) {
+        valread = recv(sock, buffer, buffer_size, 0);
+        for (i = 0; i < valread; i++) {
+            xml_reply[i + cumulative_read] = buffer[i];
         }
+        cumulative_read = cumulative_read + valread;
+    }
     xml_reply[xml_length] = '\0';
 
 #ifdef _WIN32
@@ -3875,7 +3686,9 @@ xmlDocPtr sendCommandToCamera(char *cmd, char *xaddrs)
     xmlDocPtr reply = xmlParseMemory(xml_reply, xml_length);
     char error_msg[1024] = { 0 };
 
-    if (dump_reply) { dumpReply(reply); }
+    if (dump_reply) {
+        dumpReply(reply);
+    }
 
     return reply;
 }
@@ -3885,33 +3698,27 @@ int checkForXmlErrorMsg(xmlDocPtr doc, char error_msg[1024])
     if (getXmlValue(
             doc, BAD_CAST "//s:Body//s:Fault//s:Code//s:Subcode//s:Value",
             error_msg, 1024
-        ) == 0)
-        {
-            return -1;
+        )
+        == 0) {
+        return -1;
+    } else if (getXmlValue(doc, BAD_CAST "//s:Body//s:Fault//s:Reason//s:Text", error_msg, 1024) == 0) {
+        return -1;
+    } else {
+        xmlNode* root = xmlDocGetRootElement(doc);
+        if (root) {
+            xmlNodePtr msg = root->xmlChildrenNode;
+            if ((!xmlStrcmp(msg->name, (const xmlChar*)"error"))) {
+                memset(error_msg, 0, 1024);
+                strcpy(error_msg, (char*)xmlNodeGetContent(msg));
+                return -1;
+            }
         }
-    else if (getXmlValue(doc, BAD_CAST "//s:Body//s:Fault//s:Reason//s:Text", error_msg, 1024) == 0)
-        {
-            return -1;
-        }
-    else
-        {
-            xmlNode *root = xmlDocGetRootElement(doc);
-            if (root)
-                {
-                    xmlNodePtr msg = root->xmlChildrenNode;
-                    if ((!xmlStrcmp(msg->name, (const xmlChar *)"error")))
-                        {
-                            memset(error_msg, 0, 1024);
-                            strcpy(error_msg, (char *)xmlNodeGetContent(msg));
-                            return -1;
-                        }
-                }
-        }
+    }
     return 0;
 }
 
 void addUsernameDigestHeader(
-    xmlNodePtr root, xmlNsPtr ns_env, char *user, char *password, time_t offset
+    xmlNodePtr root, xmlNsPtr ns_env, char* user, char* password, time_t offset
 )
 {
     srand(time(NULL));
@@ -3926,21 +3733,19 @@ void addUsernameDigestHeader(
     char time_holder[1024] = { 0 };
     char digest_base64[1024] = { 0 };
 
-    for (int i = 0; i < nonce_chunk_size; i++)
-        {
-            nonce_buffer[i] = (unsigned char)rand();
-        }
+    for (int i = 0; i < nonce_chunk_size; i++) {
+        nonce_buffer[i] = (unsigned char)rand();
+    }
 
     unsigned char nonce_result[30];
 
     getBase64(nonce_buffer, nonce_chunk_size, nonce_result);
-    strcpy(nonce_base64, (const char *)nonce_result);
+    strcpy(nonce_base64, (const char*)nonce_result);
 
     char time_buffer[1024];
     time_t now = time(NULL);
     now = now + offset;
-    size_t time_buffer_length =
-        strftime(time_buffer, 1024, "%Y-%m-%dT%H:%M:%S.", gmtime(&now));
+    size_t time_buffer_length = strftime(time_buffer, 1024, "%Y-%m-%dT%H:%M:%S.", gmtime(&now));
     time_buffer[time_buffer_length] = '\0';
     int millisec;
     struct timeval tv;
@@ -3971,8 +3776,8 @@ void addUsernameDigestHeader(
     SHA1_CTX ctx;
     SHA1Init(&ctx);
     SHA1Update(&ctx, nonce_buffer, nonce_chunk_size);
-    SHA1Update(&ctx, (const unsigned char *)time_buffer, strlen(time_buffer));
-    SHA1Update(&ctx, (const unsigned char *)password, strlen(password));
+    SHA1Update(&ctx, (const unsigned char*)time_buffer, strlen(time_buffer));
+    SHA1Update(&ctx, (const unsigned char*)password, strlen(password));
     SHA1Final(hash, &ctx);
 
     unsigned int digest_chunk_size = SHA1_DIGEST_SIZE;
@@ -3980,7 +3785,7 @@ void addUsernameDigestHeader(
     getBase64(hash, digest_chunk_size, digest_result);
 
     strcpy(time_holder, time_buffer);
-    strcpy(digest_base64, (const char *)digest_result);
+    strcpy(digest_base64, (const char*)digest_result);
 
     xmlNsPtr ns_wsse = xmlNewNs(
         root,
@@ -3995,11 +3800,9 @@ void addUsernameDigestHeader(
         BAD_CAST "wsu"
     );
     xmlNodePtr header = xmlNewTextChild(root, ns_env, BAD_CAST "Header", NULL);
-    xmlNodePtr security =
-        xmlNewTextChild(header, ns_wsse, BAD_CAST "Security", NULL);
+    xmlNodePtr security = xmlNewTextChild(header, ns_wsse, BAD_CAST "Security", NULL);
     xmlNewProp(security, BAD_CAST "SOAP-ENV:mustUnderstand", BAD_CAST "1");
-    xmlNodePtr username_token =
-        xmlNewTextChild(security, ns_wsse, BAD_CAST "UsernameToken", NULL);
+    xmlNodePtr username_token = xmlNewTextChild(security, ns_wsse, BAD_CAST "UsernameToken", NULL);
     xmlNewTextChild(
         username_token, ns_wsse, BAD_CAST "Username", BAD_CAST user
     );
@@ -4024,13 +3827,13 @@ void addUsernameDigestHeader(
     );
 }
 
-void getBase64(unsigned char *buffer, int chunk_size, unsigned char *result)
+void getBase64(unsigned char* buffer, int chunk_size, unsigned char* result)
 {
-    char *c = (char *)result;
+    char* c = (char*)result;
     int cnt = 0;
     base64_encodestate s;
     base64_init_encodestate(&s);
-    cnt = base64_encode_block((char *)buffer, chunk_size, c, &s);
+    cnt = base64_encode_block((char*)buffer, chunk_size, c, &s);
     c += cnt;
     cnt = base64_encode_blockend(c, &s);
     c += cnt;
@@ -4038,7 +3841,7 @@ void getBase64(unsigned char *buffer, int chunk_size, unsigned char *result)
 }
 
 void addHttpHeader(
-    xmlDocPtr doc, xmlNodePtr root, char *xaddrs, char *post_type, char cmd[],
+    xmlDocPtr doc, xmlNodePtr root, char* xaddrs, char* post_type, char cmd[],
     int cmd_length
 )
 {
@@ -4047,12 +3850,12 @@ void addHttpHeader(
     int size = xmlOutputBufferGetSize(outputbuffer);
 
     char xml[8192] = { 0 };
-    if (size > 8191)
-        {
-            fprintf(stderr, "xmlOutputBufferGetSize too big %d\n", size);
-            strncat(xml, (char *)xmlOutputBufferGetContent(outputbuffer), 8191);
-        }
-    else { strcpy(xml, (char *)xmlOutputBufferGetContent(outputbuffer)); }
+    if (size > 8191) {
+        fprintf(stderr, "xmlOutputBufferGetSize too big %d\n", size);
+        strncat(xml, (char*)xmlOutputBufferGetContent(outputbuffer), 8191);
+    } else {
+        strcpy(xml, (char*)xmlOutputBufferGetContent(outputbuffer));
+    }
 
     xmlOutputBufferFlush(outputbuffer);
     xmlOutputBufferClose(outputbuffer);
@@ -4063,42 +3866,42 @@ void addHttpHeader(
     int xml_size_length = strlen(c_xml_size) + 1;
 
     char tmp[128] = { 0 };
-    char *mark = strstr(xaddrs, "//");
+    char* mark = strstr(xaddrs, "//");
     int start = mark - xaddrs + 2;
     int tmp_len = strlen(xaddrs);
     int j;
-    for (j = 0; j < tmp_len - start; j++)
-        {
-            if (j < 128) tmp[j] = xaddrs[j + start];
-        }
+    for (j = 0; j < tmp_len - start; j++) {
+        if (j < 128)
+            tmp[j] = xaddrs[j + start];
+    }
     tmp[j] = '\0';
 
     mark = strstr(tmp, "/");
     int end = mark - tmp;
     char tmp2[128] = { 0 };
-    for (j = 0; j < end; j++) { tmp2[j] = tmp[j]; }
+    for (j = 0; j < end; j++) {
+        tmp2[j] = tmp[j];
+    }
     tmp2[j] = '\0';
 
     char host[128] = { 0 };
     char port_buf[128] = { 0 };
     mark = strstr(tmp2, ":");
-    if (mark == NULL)
-        {
-            strcpy(host, tmp2);
-            strcpy(port_buf, "80");
+    if (mark == NULL) {
+        strcpy(host, tmp2);
+        strcpy(port_buf, "80");
+    } else {
+        start = mark - tmp2;
+        for (j = 0; j < start; j++) {
+            host[j] = tmp2[j];
         }
-    else
-        {
-            start = mark - tmp2;
-            for (j = 0; j < start; j++) { host[j] = tmp2[j]; }
-            host[j] = '\0';
-            tmp_len = strlen(tmp2);
-            for (j = start + 1; j < tmp_len; j++)
-                {
-                    port_buf[j - (start + 1)] = tmp2[j];
-                }
-            port_buf[j - (start + 1)] = '\0';
+        host[j] = '\0';
+        tmp_len = strlen(tmp2);
+        for (j = start + 1; j < tmp_len; j++) {
+            port_buf[j - (start + 1)] = tmp2[j];
         }
+        port_buf[j - (start + 1)] = '\0';
+    }
     int port = atoi(port_buf);
 
     char content[] = "User-Agent: Generic\r\n"
@@ -4142,16 +3945,16 @@ void getUUID(char uuid_buf[47])
 {
     srand(time(NULL));
     strcpy(uuid_buf, "urn:uuid:");
-    for (int i = 0; i < 16; i++)
-        {
-            char buf[3];
-            sprintf(buf, "%02x", (unsigned char)rand());
-            strcat(uuid_buf, buf);
-            if (i == 3 || i == 5 || i == 7 || i == 9) strcat(uuid_buf, "-");
-        }
+    for (int i = 0; i < 16; i++) {
+        char buf[3];
+        sprintf(buf, "%02x", (unsigned char)rand());
+        strcat(uuid_buf, buf);
+        if (i == 3 || i == 5 || i == 7 || i == 9)
+            strcat(uuid_buf, "-");
+    }
 }
 
-int broadcast(struct OnvifSession *onvif_session)
+int broadcast(struct OnvifSession* onvif_session)
 {
     strcpy(preferred_network_address, onvif_session->preferred_network_address);
     struct sockaddr_in broadcast_address;
@@ -4168,49 +3971,44 @@ int broadcast(struct OnvifSession *onvif_session)
     int broadcast_message_length = strlen(broadcast_message);
     broadcast_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     setSocketOptions(broadcast_socket);
-    for (int k = 0; k < 128; k++)
-        {
-            for (int j = 0; j < 8192; j++) { onvif_session->buf[k][j] = '\0'; }
+    for (int k = 0; k < 128; k++) {
+        for (int j = 0; j < 8192; j++) {
+            onvif_session->buf[k][j] = '\0';
         }
+    }
 
-    memset((char *)&broadcast_address, 0, sizeof(broadcast_address));
+    memset((char*)&broadcast_address, 0, sizeof(broadcast_address));
     broadcast_address.sin_family = AF_INET;
     broadcast_address.sin_port = htons(3702);
     broadcast_address.sin_addr.s_addr = inet_addr("239.255.255.250");
     int status = sendto(
         broadcast_socket, broadcast_message, broadcast_message_length, 0,
-        (struct sockaddr *)&broadcast_address, sizeof(broadcast_address)
+        (struct sockaddr*)&broadcast_address, sizeof(broadcast_address)
     );
-    if (status < 0)
-        {
-            // error
-        }
+    if (status < 0) {
+        // error
+    }
 
     int i = 0;
     unsigned char looping = 1;
     address_size = sizeof(broadcast_address);
-    while (looping)
-        {
-            onvif_session->len[i] = recvfrom(
-                broadcast_socket, onvif_session->buf[i],
-                sizeof(onvif_session->buf[i]), 0,
-                (struct sockaddr *)&broadcast_address, &address_size
-            );
-            if (onvif_session->len[i] > 0)
-                {
-                    onvif_session->buf[i][onvif_session->len[i]] = '\0';
-                    // printf("session buf: %s\n", onvif_session->buf[i]);
-                    i++;
-                }
-            else
-                {
-                    looping = 0;
-                    if (onvif_session->len[i] < 0)
-                        {
-                            // error
-                        }
-                }
+    while (looping) {
+        onvif_session->len[i] = recvfrom(
+            broadcast_socket, onvif_session->buf[i],
+            sizeof(onvif_session->buf[i]), 0,
+            (struct sockaddr*)&broadcast_address, &address_size
+        );
+        if (onvif_session->len[i] > 0) {
+            onvif_session->buf[i][onvif_session->len[i]] = '\0';
+            // printf("session buf: %s\n", onvif_session->buf[i]);
+            i++;
+        } else {
+            looping = 0;
+            if (onvif_session->len[i] < 0) {
+                // error
+            }
         }
+    }
 
 #ifdef _WIN32
     closesocket(broadcast_socket);
@@ -4231,18 +4029,18 @@ DWORD GetNetworkPriority(DWORD interfaceIndex)
     row.InterfaceIndex = interfaceIndex;
 
     DWORD dwRetVal = GetIpInterfaceEntry(&row);
-    if (dwRetVal == NO_ERROR)
-        {
-            // printf("Interface Index: %d\n", row.InterfaceIndex);
-            // printf("Metric: %d\n", row.Metric);
-            result = row.Metric;
-        }
-    else { printf("GetIpInterfaceEntry failed with error: %d\n", dwRetVal); }
+    if (dwRetVal == NO_ERROR) {
+        // printf("Interface Index: %d\n", row.InterfaceIndex);
+        // printf("Metric: %d\n", row.Metric);
+        result = row.Metric;
+    } else {
+        printf("GetIpInterfaceEntry failed with error: %d\n", dwRetVal);
+    }
     return result;
 }
 #endif
 
-void getActiveNetworkInterfaces(struct OnvifSession *onvif_session)
+void getActiveNetworkInterfaces(struct OnvifSession* onvif_session)
 {
 #ifdef _WIN32
     PIP_ADAPTER_INFO pAdapterInfo;
@@ -4251,128 +4049,118 @@ void getActiveNetworkInterfaces(struct OnvifSession *onvif_session)
     int count = 0;
 
     ULONG ulOutBufLen = sizeof(IP_ADAPTER_INFO);
-    pAdapterInfo = (IP_ADAPTER_INFO *)malloc(sizeof(IP_ADAPTER_INFO));
-    if (pAdapterInfo == NULL)
-        {
-            printf("Error allocating memory needed to call GetAdaptersinfo\n");
+    pAdapterInfo = (IP_ADAPTER_INFO*)malloc(sizeof(IP_ADAPTER_INFO));
+    if (pAdapterInfo == NULL) {
+        printf("Error allocating memory needed to call GetAdaptersinfo\n");
+        return;
+    }
+
+    if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) == ERROR_BUFFER_OVERFLOW) {
+        free(pAdapterInfo);
+        pAdapterInfo = (IP_ADAPTER_INFO*)malloc(ulOutBufLen);
+        if (pAdapterInfo == NULL) {
+            printf("Error allocating memory needed to call "
+                   "GetAdaptersinfo\n");
             return;
         }
-
-    if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) == ERROR_BUFFER_OVERFLOW)
-        {
-            free(pAdapterInfo);
-            pAdapterInfo = (IP_ADAPTER_INFO *)malloc(ulOutBufLen);
-            if (pAdapterInfo == NULL)
-                {
-                    printf("Error allocating memory needed to call "
-                           "GetAdaptersinfo\n");
-                    return;
-                }
-        }
+    }
 
     DWORD highest_priority = 0xFFFFFFFF;
-    if ((dwRetVal = GetAdaptersInfo(pAdapterInfo, &ulOutBufLen)) == NO_ERROR)
-        {
-            pAdapter = pAdapterInfo;
-            while (pAdapter)
-                {
-                    if (strcmp(
-                            pAdapter->IpAddressList.IpAddress.String, "0.0.0.0"
-                        ))
-                        {
-                            char interface_info[1024] = { 0 };
-                            // sprintf(interface_info, "%s - %s",
-                            // pAdapter->IpAddressList.IpAddress.String,
-                            // pAdapter->Description);
-                            sprintf(
-                                interface_info, "%s",
-                                pAdapter->IpAddressList.IpAddress.String
-                            );
-                            // printf("Network interface info %s\n",
-                            // interface_info); printf("Combo Index: %d\n",
-                            // pAdapter->ComboIndex);
-                            DWORD priority =
-                                GetNetworkPriority(pAdapter->ComboIndex);
-                            // printf("Priority: %d\n", priority);
+    if ((dwRetVal = GetAdaptersInfo(pAdapterInfo, &ulOutBufLen)) == NO_ERROR) {
+        pAdapter = pAdapterInfo;
+        while (pAdapter) {
+            if (strcmp(
+                    pAdapter->IpAddressList.IpAddress.String, "0.0.0.0"
+                )) {
+                char interface_info[1024] = { 0 };
+                // sprintf(interface_info, "%s - %s",
+                // pAdapter->IpAddressList.IpAddress.String,
+                // pAdapter->Description);
+                sprintf(
+                    interface_info, "%s",
+                    pAdapter->IpAddressList.IpAddress.String
+                );
+                // printf("Network interface info %s\n",
+                // interface_info); printf("Combo Index: %d\n",
+                // pAdapter->ComboIndex);
+                DWORD priority = GetNetworkPriority(pAdapter->ComboIndex);
+                // printf("Priority: %d\n", priority);
 
-                            if (priority < highest_priority)
-                                {
-                                    highest_priority = priority;
-                                    strncpy(
-                                        onvif_session
-                                            ->primary_network_interface,
-                                        interface_info,
-                                        min(strlen(interface_info),
-                                            sizeof(
-                                                onvif_session
-                                                    ->primary_network_interface
-                                            ))
-                                    );
-                                }
-
-                            strncpy(
-                                onvif_session->active_network_interfaces[count],
-                                interface_info,
-                                min(strlen(interface_info), 1024)
-                            );
-                            count += 1;
-                        }
-                    pAdapter = pAdapter->Next;
+                if (priority < highest_priority) {
+                    highest_priority = priority;
+                    strncpy(
+                        onvif_session
+                            ->primary_network_interface,
+                        interface_info,
+                        min(strlen(interface_info),
+                            sizeof(
+                                onvif_session
+                                    ->primary_network_interface
+                            ))
+                    );
                 }
+
+                strncpy(
+                    onvif_session->active_network_interfaces[count],
+                    interface_info,
+                    min(strlen(interface_info), 1024)
+                );
+                count += 1;
+            }
+            pAdapter = pAdapter->Next;
         }
-    else { printf("GetAdaptersInfo failed with error: %d", dwRetVal); }
-    if (pAdapterInfo) free(pAdapterInfo);
+    } else {
+        printf("GetAdaptersInfo failed with error: %d", dwRetVal);
+    }
+    if (pAdapterInfo)
+        free(pAdapterInfo);
 
         // printf("Primary Interface: %s\n",
         // onvif_session->primary_network_interface);
 
 #else
-    struct ifaddrs *ifaddr;
+    struct ifaddrs* ifaddr;
     int family, s;
     char host[NI_MAXHOST];
     int count = 0;
 
-    if (getifaddrs(&ifaddr) == -1)
-        {
-            printf("Error: getifaddrs failed - %s\n", strerror(errno));
-            return;
+    if (getifaddrs(&ifaddr) == -1) {
+        printf("Error: getifaddrs failed - %s\n", strerror(errno));
+        return;
+    }
+
+    for (struct ifaddrs* ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL)
+            continue;
+
+        family = ifa->ifa_addr->sa_family;
+
+        if (family == AF_INET) {
+            s = getnameinfo(
+                ifa->ifa_addr, sizeof(struct sockaddr_in), host,
+                NI_MAXHOST, NULL, 0, NI_NUMERICHOST
+            );
+
+            if (s != 0) {
+                printf(
+                    "getnameinfo() failed: %s\n", gai_strerror(s)
+                );
+                continue;
+            }
+
+            if (strcmp(host, "127.0.0.1")) {
+                strcpy(
+                    onvif_session->active_network_interfaces[count],
+                    host
+                );
+                // strcat(onvif_session->active_network_interfaces[count],
+                // " - ");
+                // strcat(onvif_session->active_network_interfaces[count],
+                // ifa->ifa_name);
+                count += 1;
+            }
         }
-
-    for (struct ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next)
-        {
-            if (ifa->ifa_addr == NULL) continue;
-
-            family = ifa->ifa_addr->sa_family;
-
-            if (family == AF_INET)
-                {
-                    s = getnameinfo(
-                        ifa->ifa_addr, sizeof(struct sockaddr_in), host,
-                        NI_MAXHOST, NULL, 0, NI_NUMERICHOST
-                    );
-
-                    if (s != 0)
-                        {
-                            printf(
-                                "getnameinfo() failed: %s\n", gai_strerror(s)
-                            );
-                            continue;
-                        }
-
-                    if (strcmp(host, "127.0.0.1"))
-                        {
-                            strcpy(
-                                onvif_session->active_network_interfaces[count],
-                                host
-                            );
-                            // strcat(onvif_session->active_network_interfaces[count],
-                            // " - ");
-                            // strcat(onvif_session->active_network_interfaces[count],
-                            // ifa->ifa_name);
-                            count += 1;
-                        }
-                }
-        }
+    }
     freeifaddrs(ifaddr);
 #endif
 }
@@ -4385,63 +4173,56 @@ void getIPAddress(char buf[128])
     DWORD dwRetVal = 0;
     IN_ADDR IPAddr;
 
-    pIPAddrTable = (MIB_IPADDRTABLE *)malloc(sizeof(MIB_IPADDRTABLE));
-    if (pIPAddrTable)
-        {
-            if (GetIpAddrTable(pIPAddrTable, &dwSize, 0) ==
-                ERROR_INSUFFICIENT_BUFFER)
-                {
-                    free(pIPAddrTable);
-                    pIPAddrTable = (MIB_IPADDRTABLE *)malloc(dwSize);
-                }
-            if (pIPAddrTable == NULL) { return; }
+    pIPAddrTable = (MIB_IPADDRTABLE*)malloc(sizeof(MIB_IPADDRTABLE));
+    if (pIPAddrTable) {
+        if (GetIpAddrTable(pIPAddrTable, &dwSize, 0) == ERROR_INSUFFICIENT_BUFFER) {
+            free(pIPAddrTable);
+            pIPAddrTable = (MIB_IPADDRTABLE*)malloc(dwSize);
         }
-
-    if ((dwRetVal = GetIpAddrTable(pIPAddrTable, &dwSize, 0)) != NO_ERROR)
-        {
+        if (pIPAddrTable == NULL) {
             return;
         }
+    }
+
+    if ((dwRetVal = GetIpAddrTable(pIPAddrTable, &dwSize, 0)) != NO_ERROR) {
+        return;
+    }
 
     int p = 0;
-    while (p < (int)pIPAddrTable->dwNumEntries)
-        {
-            if (pIPAddrTable->table[p].dwAddr != inet_addr("127.0.0.1") &&
-                pIPAddrTable->table[p].dwMask == inet_addr("255.255.255.0"))
-                {
-                    IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[p].dwAddr;
-                    strcpy(buf, inet_ntoa(IPAddr));
-                    p = (int)pIPAddrTable->dwNumEntries;
-                }
-            p++;
+    while (p < (int)pIPAddrTable->dwNumEntries) {
+        if (pIPAddrTable->table[p].dwAddr != inet_addr("127.0.0.1") && pIPAddrTable->table[p].dwMask == inet_addr("255.255.255.0")) {
+            IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[p].dwAddr;
+            strcpy(buf, inet_ntoa(IPAddr));
+            p = (int)pIPAddrTable->dwNumEntries;
         }
+        p++;
+    }
 
-    if (pIPAddrTable)
-        {
-            free(pIPAddrTable);
-            pIPAddrTable = NULL;
-        }
+    if (pIPAddrTable) {
+        free(pIPAddrTable);
+        pIPAddrTable = NULL;
+    }
 
 #else
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
 
-    char *address;
-    struct ifaddrs *interfaces = NULL;
-    struct ifaddrs *temp_addr = NULL;
+    char* address;
+    struct ifaddrs* interfaces = NULL;
+    struct ifaddrs* temp_addr = NULL;
     int success = 0;
     success = getifaddrs(&interfaces);
-    if (success == 0)
-        {
-            temp_addr = interfaces;
-            while (temp_addr != NULL)
-                {
-                    address = inet_ntoa(
-                        ((struct sockaddr_in *)temp_addr->ifa_addr)->sin_addr
-                    );
-                    if (strcmp(address, "127.0.0.1") != 0) strcpy(buf, address);
-                }
-            temp_addr = temp_addr->ifa_next;
+    if (success == 0) {
+        temp_addr = interfaces;
+        while (temp_addr != NULL) {
+            address = inet_ntoa(
+                ((struct sockaddr_in*)temp_addr->ifa_addr)->sin_addr
+            );
+            if (strcmp(address, "127.0.0.1") != 0)
+                strcpy(buf, address);
         }
+        temp_addr = temp_addr->ifa_next;
+    }
     freeifaddrs(interfaces);
 
 #else
@@ -4450,96 +4231,85 @@ void getIPAddress(char buf[128])
     int sd, ifc_num, addr, mask, i;
 
     sd = socket(PF_INET, SOCK_DGRAM, 0);
-    if (sd > 0)
-        {
-            ifc.ifc_len = sizeof(ifr);
-            ifc.ifc_ifcu.ifcu_buf = (caddr_t)ifr;
+    if (sd > 0) {
+        ifc.ifc_len = sizeof(ifr);
+        ifc.ifc_ifcu.ifcu_buf = (caddr_t)ifr;
 
-            if (ioctl(sd, SIOCGIFCONF, &ifc) == 0)
-                {
-                    ifc_num = ifc.ifc_len / sizeof(struct ifreq);
+        if (ioctl(sd, SIOCGIFCONF, &ifc) == 0) {
+            ifc_num = ifc.ifc_len / sizeof(struct ifreq);
 
-                    for (i = 0; i < ifc_num; ++i)
-                        {
-                            if (ifr[i].ifr_addr.sa_family != AF_INET)
-                                {
-                                    continue;
-                                }
-
-                            if (ioctl(sd, SIOCGIFNETMASK, &ifr[i]) == 0)
-                                {
-                                    mask = ((struct sockaddr_in
-                                                 *)(&ifr[i].ifr_netmask))
-                                               ->sin_addr.s_addr;
-                                    char mask_buf[128] = { 0 };
-                                    sprintf(
-                                        mask_buf, "%d.%d.%d.%d",
-                                        INT_TO_ADDR(mask)
-                                    );
-                                    if (strcmp(mask_buf, "255.255.255.0") == 0)
-                                        {
-                                            if (ioctl(
-                                                    sd, SIOCGIFADDR, &ifr[i]
-                                                ) == 0)
-                                                {
-                                                    addr =
-                                                        ((struct sockaddr_in
-                                                              *)(&ifr[i]
-                                                                      .ifr_addr)
-                                                        )
-                                                            ->sin_addr.s_addr;
-                                                    char addr_buf[128] = { 0 };
-                                                    sprintf(
-                                                        addr_buf, "%d.%d.%d.%d",
-                                                        INT_TO_ADDR(addr)
-                                                    );
-                                                    if (strcmp(
-                                                            addr_buf,
-                                                            "127.0.0.1"
-                                                        ) != 0)
-                                                        {
-                                                            printf(
-                                                                "--------------"
-                                                                "--------------"
-                                                                "--------------"
-                                                                "-----%s\n",
-                                                                addr_buf
-                                                            );
-                                                            strcpy(
-                                                                buf, addr_buf
-                                                            );
-                                                        }
-                                                }
-                                        }
-                                }
-                        }
+            for (i = 0; i < ifc_num; ++i) {
+                if (ifr[i].ifr_addr.sa_family != AF_INET) {
+                    continue;
                 }
+
+                if (ioctl(sd, SIOCGIFNETMASK, &ifr[i]) == 0) {
+                    mask = ((struct sockaddr_in*)(&ifr[i].ifr_netmask))
+                               ->sin_addr.s_addr;
+                    char mask_buf[128] = { 0 };
+                    sprintf(
+                        mask_buf, "%d.%d.%d.%d",
+                        INT_TO_ADDR(mask)
+                    );
+                    if (strcmp(mask_buf, "255.255.255.0") == 0) {
+                        if (ioctl(
+                                sd, SIOCGIFADDR, &ifr[i]
+                            )
+                            == 0) {
+                            addr = ((struct sockaddr_in*)(&ifr[i]
+                                                               .ifr_addr)
+                            )
+                                       ->sin_addr.s_addr;
+                            char addr_buf[128] = { 0 };
+                            sprintf(
+                                addr_buf, "%d.%d.%d.%d",
+                                INT_TO_ADDR(addr)
+                            );
+                            if (strcmp(
+                                    addr_buf,
+                                    "127.0.0.1"
+                                )
+                                != 0) {
+                                printf(
+                                    "--------------"
+                                    "--------------"
+                                    "--------------"
+                                    "-----%s\n",
+                                    addr_buf
+                                );
+                                strcpy(
+                                    buf, addr_buf
+                                );
+                            }
+                        }
+                    }
+                }
+            }
         }
+    }
     close(sd);
 #endif /* not  __APPLE__ || __FreeBSD__ */
 #endif /* not _WIN32 */
 }
 
-int mask2prefix(char *mask_buf)
+int mask2prefix(char* mask_buf)
 {
     struct in_addr mask;
     inet_pton(AF_INET, mask_buf, &mask);
     uint32_t number = ntohl(mask.s_addr);
     int count = 0;
     unsigned int step = 0;
-    while (number > 0)
-        {
-            if (number & 1)
-                {
-                    step = 1;
-                    count++;
-                }
-            else
-                {
-                    if (step) { return -1; }
-                }
-            number >>= 1;
+    while (number > 0) {
+        if (number & 1) {
+            step = 1;
+            count++;
+        } else {
+            if (step) {
+                return -1;
+            }
         }
+        number >>= 1;
+    }
     return count;
 }
 
@@ -4548,8 +4318,11 @@ void prefix2mask(int prefix, char mask_buf[128])
     struct in_addr mask;
     uint32_t number;
 
-    if (prefix) { number = htonl(~((1 << (32 - prefix)) - 1)); }
-    else { number = htonl(0); }
+    if (prefix) {
+        number = htonl(~((1 << (32 - prefix)) - 1));
+    } else {
+        number = htonl(0);
+    }
 
     mask.s_addr = number;
     inet_ntop(AF_INET, &mask, mask_buf, 128);
@@ -4571,89 +4344,76 @@ int setSocketOptions(int socket)
     DWORD dwRetVal = 0;
     IN_ADDR IPAddr;
 
-    pIPAddrTable = (MIB_IPADDRTABLE *)malloc(sizeof(MIB_IPADDRTABLE));
-    if (pIPAddrTable)
-        {
-            if (GetIpAddrTable(pIPAddrTable, &dwSize, 0) ==
-                ERROR_INSUFFICIENT_BUFFER)
-                {
-                    free(pIPAddrTable);
-                    pIPAddrTable = (MIB_IPADDRTABLE *)malloc(dwSize);
-                }
-            if (pIPAddrTable == NULL)
-                {
-                    printf("Memory allocation failed for GetIpAddrTable\n");
-                    return -1;
-                }
+    pIPAddrTable = (MIB_IPADDRTABLE*)malloc(sizeof(MIB_IPADDRTABLE));
+    if (pIPAddrTable) {
+        if (GetIpAddrTable(pIPAddrTable, &dwSize, 0) == ERROR_INSUFFICIENT_BUFFER) {
+            free(pIPAddrTable);
+            pIPAddrTable = (MIB_IPADDRTABLE*)malloc(dwSize);
         }
-
-    if ((dwRetVal = GetIpAddrTable(pIPAddrTable, &dwSize, 0)) != NO_ERROR)
-        {
-            printf("GetIpAddrTable failed with error %d\n", dwRetVal);
+        if (pIPAddrTable == NULL) {
+            printf("Memory allocation failed for GetIpAddrTable\n");
             return -1;
         }
+    }
+
+    if ((dwRetVal = GetIpAddrTable(pIPAddrTable, &dwSize, 0)) != NO_ERROR) {
+        printf("GetIpAddrTable failed with error %d\n", dwRetVal);
+        return -1;
+    }
 
     int p = 0;
-    while (p < (int)pIPAddrTable->dwNumEntries)
-        {
-            IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[p].dwAddr;
-            IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[p].dwMask;
-            if (pIPAddrTable->table[p].dwAddr != inet_addr("127.0.0.1") &&
-                pIPAddrTable->table[p].dwMask == inet_addr("255.255.255.0"))
-                {
-                    if (strlen(preferred_network_address) > 0)
-                        {
-                            localInterface.s_addr =
-                                inet_addr(preferred_network_address);
-                        }
-                    else
-                        {
-                            localInterface.s_addr =
-                                pIPAddrTable->table[p].dwAddr;
-                        }
-                    status = setsockopt(
-                        socket, IPPROTO_IP, IP_MULTICAST_IF,
-                        (const char *)&localInterface, sizeof(localInterface)
-                    );
-                    if (status < 0) printf("ip_multicast_if error");
-                    p = (int)pIPAddrTable->dwNumEntries;
-                }
-            p++;
+    while (p < (int)pIPAddrTable->dwNumEntries) {
+        IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[p].dwAddr;
+        IPAddr.S_un.S_addr = (u_long)pIPAddrTable->table[p].dwMask;
+        if (pIPAddrTable->table[p].dwAddr != inet_addr("127.0.0.1") && pIPAddrTable->table[p].dwMask == inet_addr("255.255.255.0")) {
+            if (strlen(preferred_network_address) > 0) {
+                localInterface.s_addr = inet_addr(preferred_network_address);
+            } else {
+                localInterface.s_addr = pIPAddrTable->table[p].dwAddr;
+            }
+            status = setsockopt(
+                socket, IPPROTO_IP, IP_MULTICAST_IF,
+                (const char*)&localInterface, sizeof(localInterface)
+            );
+            if (status < 0)
+                printf("ip_multicast_if error");
+            p = (int)pIPAddrTable->dwNumEntries;
         }
+        p++;
+    }
 
-    if (pIPAddrTable)
-        {
-            free(pIPAddrTable);
-            pIPAddrTable = NULL;
-        }
+    if (pIPAddrTable) {
+        free(pIPAddrTable);
+        pIPAddrTable = NULL;
+    }
 
     status = setsockopt(
-        socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&broadcast,
+        socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&broadcast,
         sizeof(broadcast)
     );
 #else
-    if (strlen(preferred_network_address) > 0)
-        {
-            localInterface.s_addr = inet_addr(preferred_network_address);
-            status = setsockopt(
-                socket, IPPROTO_IP, IP_MULTICAST_IF,
-                (const char *)&localInterface, sizeof(localInterface)
-            );
-            if (status < 0) printf("ip_multicast_if error");
-        }
+    if (strlen(preferred_network_address) > 0) {
+        localInterface.s_addr = inet_addr(preferred_network_address);
+        status = setsockopt(
+            socket, IPPROTO_IP, IP_MULTICAST_IF,
+            (const char*)&localInterface, sizeof(localInterface)
+        );
+        if (status < 0)
+            printf("ip_multicast_if error");
+    }
     status = setsockopt(
-        socket, SOL_SOCKET, SO_RCVTIMEO, (struct timeval *)&tv,
+        socket, SOL_SOCKET, SO_RCVTIMEO, (struct timeval*)&tv,
         sizeof(struct timeval)
     );
 #endif
     status = setsockopt(
-        socket, IPPROTO_IP, IP_MULTICAST_LOOP, (char *)&loopch, sizeof(loopch)
+        socket, IPPROTO_IP, IP_MULTICAST_LOOP, (char*)&loopch, sizeof(loopch)
     );
     return 0;
 }
 
 #ifdef __MINGW32__
-int inet_pton(int af, const char *src, void *dst)
+int inet_pton(int af, const char* src, void* dst)
 {
     struct sockaddr_storage ss;
     int size = sizeof(ss);
@@ -4663,25 +4423,20 @@ int inet_pton(int af, const char *src, void *dst)
     strncpy(src_copy, src, INET6_ADDRSTRLEN + 1);
     src_copy[INET6_ADDRSTRLEN] = 0;
 
-    if (WSAStringToAddress(src_copy, af, NULL, (struct sockaddr *)&ss, &size) ==
-        0)
-        {
-            switch (af)
-                {
-                    case AF_INET:
-                        *(struct in_addr *)dst =
-                            ((struct sockaddr_in *)&ss)->sin_addr;
-                        return 1;
-                    case AF_INET6:
-                        *(struct in6_addr *)dst =
-                            ((struct sockaddr_in6 *)&ss)->sin6_addr;
-                        return 1;
-                }
+    if (WSAStringToAddress(src_copy, af, NULL, (struct sockaddr*)&ss, &size) == 0) {
+        switch (af) {
+            case AF_INET:
+                *(struct in_addr*)dst = ((struct sockaddr_in*)&ss)->sin_addr;
+                return 1;
+            case AF_INET6:
+                *(struct in6_addr*)dst = ((struct sockaddr_in6*)&ss)->sin6_addr;
+                return 1;
         }
+    }
     return 0;
 }
 
-const char *inet_ntop(int af, const void *src, char *dst, socklen_t size)
+const char* inet_ntop(int af, const void* src, char* dst, socklen_t size)
 {
     struct sockaddr_storage ss;
     unsigned long s = size;
@@ -4689,151 +4444,141 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size)
     ZeroMemory(&ss, sizeof(ss));
     ss.ss_family = af;
 
-    switch (af)
-        {
-            case AF_INET:
-                ((struct sockaddr_in *)&ss)->sin_addr = *(struct in_addr *)src;
-                break;
-            case AF_INET6:
-                ((struct sockaddr_in6 *)&ss)->sin6_addr =
-                    *(struct in6_addr *)src;
-                break;
-            default: return NULL;
-        }
+    switch (af) {
+        case AF_INET:
+            ((struct sockaddr_in*)&ss)->sin_addr = *(struct in_addr*)src;
+            break;
+        case AF_INET6:
+            ((struct sockaddr_in6*)&ss)->sin6_addr = *(struct in6_addr*)src;
+            break;
+        default: return NULL;
+    }
 
     return (WSAAddressToString(
-                (struct sockaddr *)&ss, sizeof(ss), NULL, dst, &s
-            ) == 0)
-               ? dst
-               : NULL;
+                (struct sockaddr*)&ss, sizeof(ss), NULL, dst, &s
+            )
+            == 0)
+        ? dst
+        : NULL;
 }
 #endif
 
 void extractOnvifService(char service[1024], bool post)
 {
     int length = strlen(service);
-    char *sub = strstr(service, "//");
-    if (sub != NULL)
-        {
-            int mark = sub - service;
-            mark = mark + 2;
+    char* sub = strstr(service, "//");
+    if (sub != NULL) {
+        int mark = sub - service;
+        mark = mark + 2;
 
-            int i;
-            for (i = 0; i < length - mark; i++)
-                {
-                    service[i] = service[i + mark];
-                }
-            service[i] = '\0';
-
-            sub = strstr(service, " ");
-            if (sub != NULL)
-                {
-                    mark = sub - service;
-                    service[mark] = '\0';
-                }
-
-            length = strlen(service);
-            sub = strstr(service, "/");
-            if (sub != NULL)
-                {
-                    mark = sub - service;
-                    for (i = 0; i < length - mark; i++)
-                        {
-                            service[i] = service[i + mark];
-                        }
-                    service[i] = 0;
-
-                    if (post)
-                        {
-                            char temp_buf[128] = { 0 };
-                            strcat(temp_buf, "POST ");
-                            strcat(temp_buf, service);
-                            strcat(temp_buf, " HTTP/1.1\r\n");
-                            strcpy(service, "");
-                            strcpy(service, temp_buf);
-                        }
-                }
+        int i;
+        for (i = 0; i < length - mark; i++) {
+            service[i] = service[i + mark];
         }
+        service[i] = '\0';
+
+        sub = strstr(service, " ");
+        if (sub != NULL) {
+            mark = sub - service;
+            service[mark] = '\0';
+        }
+
+        length = strlen(service);
+        sub = strstr(service, "/");
+        if (sub != NULL) {
+            mark = sub - service;
+            for (i = 0; i < length - mark; i++) {
+                service[i] = service[i + mark];
+            }
+            service[i] = 0;
+
+            if (post) {
+                char temp_buf[128] = { 0 };
+                strcat(temp_buf, "POST ");
+                strcat(temp_buf, service);
+                strcat(temp_buf, " HTTP/1.1\r\n");
+                strcpy(service, "");
+                strcpy(service, temp_buf);
+            }
+        }
+    }
 }
 
-void extractHost(char *xaddrs, char host[128])
+void extractHost(char* xaddrs, char host[128])
 {
     char tmp[128] = { 0 };
-    char *mark = NULL;
+    char* mark = NULL;
 
-    if (mark = strstr(xaddrs, "//"))
-        {
-            int start = mark - xaddrs + 2;
-            for (int j = 0; j < strlen(xaddrs) - start; j++)
-                {
-                    if (j < 128) tmp[j] = xaddrs[j + start];
-                }
+    if (mark = strstr(xaddrs, "//")) {
+        int start = mark - xaddrs + 2;
+        for (int j = 0; j < strlen(xaddrs) - start; j++) {
+            if (j < 128)
+                tmp[j] = xaddrs[j + start];
         }
+    }
 
-    if (mark = strstr(tmp, "/"))
-        {
-            int end = mark - tmp;
-            for (int j = end; j < strlen(tmp); j++) tmp[j] = '\0';
-        }
+    if (mark = strstr(tmp, "/")) {
+        int end = mark - tmp;
+        for (int j = end; j < strlen(tmp); j++) tmp[j] = '\0';
+    }
 
-    if (mark = strstr(tmp, ":"))
-        {
-            int start = mark - tmp;
-            for (int j = mark - tmp; j < strlen(tmp); j++) { tmp[j] = '\0'; }
+    if (mark = strstr(tmp, ":")) {
+        int start = mark - tmp;
+        for (int j = mark - tmp; j < strlen(tmp); j++) {
+            tmp[j] = '\0';
         }
+    }
 
     memset(host, 0, 128);
     strcpy(host, tmp);
 }
 
-void getScopeField(char *scope, char *field_name, char cleaned[1024])
+void getScopeField(char* scope, char* field_name, char cleaned[1024])
 {
-    char *field;
+    char* field;
     char field_contents[1024] = { 0 };
-    char *mark;
+    char* mark;
     int length;
-    char *result = NULL;
+    char* result = NULL;
 
     field = strstr(scope, field_name);
-    if (field != NULL)
-        {
-            field = field + strlen(field_name);
-            mark = strstr(field, " ");
-            if (mark != NULL)
-                {
-                    length = mark - field;
-                    strncpy(field_contents, field, length);
-                }
-            else { strcpy(field_contents, field); }
-
-            length = strlen(field_contents);
-            int offset = 0;
-            int j;
-            for (int i = 0; i < length; i++)
-                {
-                    j = i - offset;
-                    if (field_contents[i] == '%')
-                        {
-                            char middle[3] = { 0 };
-                            i++;
-                            offset++;
-                            middle[0] = field_contents[i];
-                            i++;
-                            offset++;
-                            middle[1] = field_contents[i];
-                            char *ptr;
-                            int result = strtol(middle, &ptr, 16);
-                            cleaned[j] = result;
-                        }
-                    else { cleaned[j] = field_contents[i]; }
-                }
-            cleaned[length] = '\0';
+    if (field != NULL) {
+        field = field + strlen(field_name);
+        mark = strstr(field, " ");
+        if (mark != NULL) {
+            length = mark - field;
+            strncpy(field_contents, field, length);
+        } else {
+            strcpy(field_contents, field);
         }
+
+        length = strlen(field_contents);
+        int offset = 0;
+        int j;
+        for (int i = 0; i < length; i++) {
+            j = i - offset;
+            if (field_contents[i] == '%') {
+                char middle[3] = { 0 };
+                i++;
+                offset++;
+                middle[0] = field_contents[i];
+                i++;
+                offset++;
+                middle[1] = field_contents[i];
+                char* ptr;
+                int result = strtol(middle, &ptr, 16);
+                cleaned[j] = result;
+            } else {
+                cleaned[j] = field_contents[i];
+            }
+        }
+        cleaned[length] = '\0';
+    }
 }
 
 void getCameraName(
-    int ordinal, struct OnvifSession *onvif_session,
-    struct OnvifData *onvif_data
+    int ordinal, struct OnvifSession* onvif_session,
+    struct OnvifData* onvif_data
 )
 {
     xmlDocPtr xml_input = xmlParseMemory(
@@ -4853,15 +4598,15 @@ void getCameraName(
     getScopeField(scopes, "onvif://www.onvif.org/name/", temp_mfgr);
     getScopeField(scopes, "onvif://www.onvif.org/hardware/", temp_hdwr);
 
-    if (strlen(temp_mfgr) > 0) { strcat(onvif_data->camera_name, temp_mfgr); }
-    if (strlen(temp_hdwr) > 0)
-        {
-            if (strstr(temp_mfgr, temp_hdwr) == NULL)
-                {
-                    strcat(onvif_data->camera_name, " ");
-                    strcat(onvif_data->camera_name, temp_hdwr);
-                }
+    if (strlen(temp_mfgr) > 0) {
+        strcat(onvif_data->camera_name, temp_mfgr);
+    }
+    if (strlen(temp_hdwr) > 0) {
+        if (strstr(temp_mfgr, temp_hdwr) == NULL) {
+            strcat(onvif_data->camera_name, " ");
+            strcat(onvif_data->camera_name, temp_hdwr);
         }
+    }
 
     if (strlen(onvif_data->camera_name) == 0)
         strcpy(onvif_data->camera_name, "UNKNOWN CAMERA");
@@ -4870,8 +4615,8 @@ void getCameraName(
 }
 
 bool extractXAddrs(
-    int ordinal, struct OnvifSession *onvif_session,
-    struct OnvifData *onvif_data
+    int ordinal, struct OnvifSession* onvif_session,
+    struct OnvifData* onvif_data
 )
 {
     bool result = false;
@@ -4882,102 +4627,90 @@ bool extractXAddrs(
             xml_input,
             BAD_CAST "//s:Body//d:ProbeMatches//d:ProbeMatch//d:XAddrs",
             onvif_data->xaddrs, 1024
-        ) == 0)
-        {
-            char *sub = strstr(onvif_data->xaddrs, " ");
-            if (sub != NULL)
-                {
-                    int mark = sub - onvif_data->xaddrs;
-                    char test[16] = { 0 };
-                    strncpy(test, onvif_data->xaddrs, 15);
-                    if (strcmp(test, "http://169.254."))
-                        {
-                            onvif_data->xaddrs[mark] = '\0';
-                        }
-                    else
-                        {
-                            char other[128] = { 0 };
-                            if (strlen(sub) > 1)
-                                {
-                                    strcpy(other, sub + 1);
-                                    memset(onvif_data->xaddrs, 0, 1024);
-                                    strcpy(onvif_data->xaddrs, other);
-                                }
-                        }
+        )
+        == 0) {
+        char* sub = strstr(onvif_data->xaddrs, " ");
+        if (sub != NULL) {
+            int mark = sub - onvif_data->xaddrs;
+            char test[16] = { 0 };
+            strncpy(test, onvif_data->xaddrs, 15);
+            if (strcmp(test, "http://169.254.")) {
+                onvif_data->xaddrs[mark] = '\0';
+            } else {
+                char other[128] = { 0 };
+                if (strlen(sub) > 1) {
+                    strcpy(other, sub + 1);
+                    memset(onvif_data->xaddrs, 0, 1024);
+                    strcpy(onvif_data->xaddrs, other);
                 }
-            strcpy(onvif_data->device_service, onvif_data->xaddrs);
-            result = true;
+            }
         }
+        strcpy(onvif_data->device_service, onvif_data->xaddrs);
+        result = true;
+    }
     xmlFreeDoc(xml_input);
     return result;
 }
 
-void clearData(struct OnvifData *onvif_data)
+void clearData(struct OnvifData* onvif_data)
 {
-    for (int i = 0; i < 16; i++)
-        {
-            for (int j = 0; j < 128; j++)
-                {
-                    onvif_data->resolutions_buf[i][j] = '\0';
-                }
+    for (int i = 0; i < 16; i++) {
+        for (int j = 0; j < 128; j++) {
+            onvif_data->resolutions_buf[i][j] = '\0';
         }
-    for (int i = 0; i < 3; i++)
-        {
-            for (int j = 0; j < 128; j++)
-                {
-                    onvif_data->audio_encoders[i][j] = '\0';
-                }
-            for (int j = 0; j < 3; j++)
-                {
-                    onvif_data->audio_sample_rates[i][j] = 0;
-                    onvif_data->audio_bitrates[i][j] = 0;
-                }
+    }
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 128; j++) {
+            onvif_data->audio_encoders[i][j] = '\0';
         }
-    for (int i = 0; i < 128; i++)
-        {
-            onvif_data->videoEncoderConfigurationToken[i] = '\0';
-            onvif_data->networkInterfaceToken[i] = '\0';
-            onvif_data->networkInterfaceName[i] = '\0';
-            onvif_data->ip_address_buf[i] = '\0';
-            onvif_data->default_gateway_buf[i] = '\0';
-            onvif_data->dns_buf[i] = '\0';
-            onvif_data->mask_buf[i] = '\0';
-            onvif_data->videoSourceConfigurationToken[i] = '\0';
-            onvif_data->video_encoder_name[i] = '\0';
-            onvif_data->h264_profile[i] = '\0';
-            onvif_data->multicast_address_type[i] = '\0';
-            onvif_data->multicast_address[i] = '\0';
-            onvif_data->session_time_out[i] = '\0';
-            onvif_data->media_service[i] = '\0';
-            onvif_data->imaging_service[i] = '\0';
-            onvif_data->ptz_service[i] = '\0';
-            onvif_data->event_service[i] = '\0';
-            onvif_data->profileToken[i] = '\0';
-            onvif_data->username[i] = '\0';
-            onvif_data->password[i] = '\0';
-            onvif_data->encoding[i] = '\0';
-            onvif_data->timezone[i] = '\0';
-            onvif_data->ntp_type[i] = '\0';
-            onvif_data->ntp_addr[i] = '\0';
-            onvif_data->host[i] = '\0';
-            onvif_data->serial_number[i] = '\0';
-            onvif_data->audio_encoding[i] = '\0';
-            onvif_data->audio_name[i] = '\0';
-            onvif_data->audioEncoderConfigurationToken[i] = '\0';
-            onvif_data->audioSourceConfigurationToken[i] = '\0';
-            onvif_data->audio_session_timeout[i] = '\0';
-            onvif_data->audio_multicast_type[i] = '\0';
-            onvif_data->audio_multicast_address[i] = '\0';
+        for (int j = 0; j < 3; j++) {
+            onvif_data->audio_sample_rates[i][j] = 0;
+            onvif_data->audio_bitrates[i][j] = 0;
         }
-    for (int i = 0; i < 1024; i++)
-        {
-            onvif_data->xaddrs[i] = '\0';
-            onvif_data->device_service[i] = '\0';
-            onvif_data->stream_uri[i] = '\0';
-            onvif_data->snapshot_uri[i] = '\0';
-            onvif_data->camera_name[i] = '\0';
-            onvif_data->host_name[i] = '\0';
-        }
+    }
+    for (int i = 0; i < 128; i++) {
+        onvif_data->videoEncoderConfigurationToken[i] = '\0';
+        onvif_data->networkInterfaceToken[i] = '\0';
+        onvif_data->networkInterfaceName[i] = '\0';
+        onvif_data->ip_address_buf[i] = '\0';
+        onvif_data->default_gateway_buf[i] = '\0';
+        onvif_data->dns_buf[i] = '\0';
+        onvif_data->mask_buf[i] = '\0';
+        onvif_data->videoSourceConfigurationToken[i] = '\0';
+        onvif_data->video_encoder_name[i] = '\0';
+        onvif_data->h264_profile[i] = '\0';
+        onvif_data->multicast_address_type[i] = '\0';
+        onvif_data->multicast_address[i] = '\0';
+        onvif_data->session_time_out[i] = '\0';
+        onvif_data->media_service[i] = '\0';
+        onvif_data->imaging_service[i] = '\0';
+        onvif_data->ptz_service[i] = '\0';
+        onvif_data->event_service[i] = '\0';
+        onvif_data->profileToken[i] = '\0';
+        onvif_data->username[i] = '\0';
+        onvif_data->password[i] = '\0';
+        onvif_data->encoding[i] = '\0';
+        onvif_data->timezone[i] = '\0';
+        onvif_data->ntp_type[i] = '\0';
+        onvif_data->ntp_addr[i] = '\0';
+        onvif_data->host[i] = '\0';
+        onvif_data->serial_number[i] = '\0';
+        onvif_data->audio_encoding[i] = '\0';
+        onvif_data->audio_name[i] = '\0';
+        onvif_data->audioEncoderConfigurationToken[i] = '\0';
+        onvif_data->audioSourceConfigurationToken[i] = '\0';
+        onvif_data->audio_session_timeout[i] = '\0';
+        onvif_data->audio_multicast_type[i] = '\0';
+        onvif_data->audio_multicast_address[i] = '\0';
+    }
+    for (int i = 0; i < 1024; i++) {
+        onvif_data->xaddrs[i] = '\0';
+        onvif_data->device_service[i] = '\0';
+        onvif_data->stream_uri[i] = '\0';
+        onvif_data->snapshot_uri[i] = '\0';
+        onvif_data->camera_name[i] = '\0';
+        onvif_data->host_name[i] = '\0';
+    }
     onvif_data->gov_length_min = 0;
     onvif_data->gov_length_max = 0;
     onvif_data->frame_rate_min = 0;
@@ -5032,77 +4765,65 @@ void clearData(struct OnvifData *onvif_data)
     onvif_data->sync_audio = false;
 }
 
-void copyData(struct OnvifData *dst, struct OnvifData *src)
+void copyData(struct OnvifData* dst, struct OnvifData* src)
 {
-    for (int i = 0; i < 16; i++)
-        {
-            for (int j = 0; j < 128; j++)
-                {
-                    dst->resolutions_buf[i][j] = src->resolutions_buf[i][j];
-                }
+    for (int i = 0; i < 16; i++) {
+        for (int j = 0; j < 128; j++) {
+            dst->resolutions_buf[i][j] = src->resolutions_buf[i][j];
         }
-    for (int i = 0; i < 3; i++)
-        {
-            for (int j = 0; j < 128; j++)
-                {
-                    dst->audio_encoders[i][j] = src->audio_encoders[i][j];
-                }
-            for (int j = 0; j < 8; j++)
-                {
-                    dst->audio_sample_rates[i][j] =
-                        src->audio_sample_rates[i][j];
-                    dst->audio_bitrates[i][j] = src->audio_bitrates[i][j];
-                }
+    }
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 128; j++) {
+            dst->audio_encoders[i][j] = src->audio_encoders[i][j];
         }
-    for (int i = 0; i < 128; i++)
-        {
-            dst->videoEncoderConfigurationToken[i] =
-                src->videoEncoderConfigurationToken[i];
-            dst->networkInterfaceToken[i] = src->networkInterfaceToken[i];
-            dst->networkInterfaceName[i] = src->networkInterfaceName[i];
-            dst->ip_address_buf[i] = src->ip_address_buf[i];
-            dst->default_gateway_buf[i] = src->default_gateway_buf[i];
-            dst->dns_buf[i] = src->dns_buf[i];
-            dst->videoSourceConfigurationToken[i] =
-                src->videoSourceConfigurationToken[i];
-            dst->video_encoder_name[i] = src->video_encoder_name[i];
-            dst->h264_profile[i] = src->h264_profile[i];
-            dst->multicast_address_type[i] = src->multicast_address_type[i];
-            dst->multicast_address[i] = src->multicast_address[i];
-            dst->session_time_out[i] = src->session_time_out[i];
-            dst->media_service[i] = src->media_service[i];
-            dst->imaging_service[i] = src->imaging_service[i];
-            dst->ptz_service[i] = src->ptz_service[i];
-            dst->event_service[i] = src->event_service[i];
-            dst->profileToken[i] = src->profileToken[i];
-            dst->username[i] = src->username[i];
-            dst->password[i] = src->password[i];
-            dst->encoding[i] = src->encoding[i];
-            dst->timezone[i] = src->timezone[i];
-            dst->ntp_type[i] = src->ntp_type[i];
-            dst->ntp_addr[i] = src->ntp_addr[i];
-            dst->host[i] = src->host[i];
-            dst->serial_number[i] = src->serial_number[i];
-            dst->audio_encoding[i] = src->audio_encoding[i];
-            dst->audio_name[i] = src->audio_name[i];
-            dst->audioEncoderConfigurationToken[i] =
-                src->audioEncoderConfigurationToken[i];
-            dst->audioSourceConfigurationToken[i] =
-                src->audioSourceConfigurationToken[i];
-            dst->audio_session_timeout[i] = src->audio_session_timeout[i];
-            dst->audio_multicast_type[i] = src->audio_multicast_type[i];
-            dst->audio_multicast_address[i] = src->audio_multicast_address[i];
+        for (int j = 0; j < 8; j++) {
+            dst->audio_sample_rates[i][j] = src->audio_sample_rates[i][j];
+            dst->audio_bitrates[i][j] = src->audio_bitrates[i][j];
         }
-    for (int i = 0; i < 1024; i++)
-        {
-            dst->xaddrs[i] = src->xaddrs[i];
-            dst->device_service[i] = src->device_service[i];
-            dst->stream_uri[i] = src->stream_uri[i];
-            dst->snapshot_uri[i] = src->snapshot_uri[i];
-            dst->camera_name[i] = src->camera_name[i];
-            dst->host_name[i] = src->host_name[i];
-            dst->last_error[i] = src->last_error[i];
-        }
+    }
+    for (int i = 0; i < 128; i++) {
+        dst->videoEncoderConfigurationToken[i] = src->videoEncoderConfigurationToken[i];
+        dst->networkInterfaceToken[i] = src->networkInterfaceToken[i];
+        dst->networkInterfaceName[i] = src->networkInterfaceName[i];
+        dst->ip_address_buf[i] = src->ip_address_buf[i];
+        dst->default_gateway_buf[i] = src->default_gateway_buf[i];
+        dst->dns_buf[i] = src->dns_buf[i];
+        dst->videoSourceConfigurationToken[i] = src->videoSourceConfigurationToken[i];
+        dst->video_encoder_name[i] = src->video_encoder_name[i];
+        dst->h264_profile[i] = src->h264_profile[i];
+        dst->multicast_address_type[i] = src->multicast_address_type[i];
+        dst->multicast_address[i] = src->multicast_address[i];
+        dst->session_time_out[i] = src->session_time_out[i];
+        dst->media_service[i] = src->media_service[i];
+        dst->imaging_service[i] = src->imaging_service[i];
+        dst->ptz_service[i] = src->ptz_service[i];
+        dst->event_service[i] = src->event_service[i];
+        dst->profileToken[i] = src->profileToken[i];
+        dst->username[i] = src->username[i];
+        dst->password[i] = src->password[i];
+        dst->encoding[i] = src->encoding[i];
+        dst->timezone[i] = src->timezone[i];
+        dst->ntp_type[i] = src->ntp_type[i];
+        dst->ntp_addr[i] = src->ntp_addr[i];
+        dst->host[i] = src->host[i];
+        dst->serial_number[i] = src->serial_number[i];
+        dst->audio_encoding[i] = src->audio_encoding[i];
+        dst->audio_name[i] = src->audio_name[i];
+        dst->audioEncoderConfigurationToken[i] = src->audioEncoderConfigurationToken[i];
+        dst->audioSourceConfigurationToken[i] = src->audioSourceConfigurationToken[i];
+        dst->audio_session_timeout[i] = src->audio_session_timeout[i];
+        dst->audio_multicast_type[i] = src->audio_multicast_type[i];
+        dst->audio_multicast_address[i] = src->audio_multicast_address[i];
+    }
+    for (int i = 0; i < 1024; i++) {
+        dst->xaddrs[i] = src->xaddrs[i];
+        dst->device_service[i] = src->device_service[i];
+        dst->stream_uri[i] = src->stream_uri[i];
+        dst->snapshot_uri[i] = src->snapshot_uri[i];
+        dst->camera_name[i] = src->camera_name[i];
+        dst->host_name[i] = src->host_name[i];
+        dst->last_error[i] = src->last_error[i];
+    }
     dst->gov_length_min = src->gov_length_min;
     dst->gov_length_max = src->gov_length_max;
     dst->frame_rate_min = src->frame_rate_min;
@@ -5157,22 +4878,19 @@ void copyData(struct OnvifData *dst, struct OnvifData *src)
     dst->sync_audio = src->sync_audio;
 }
 
-void initializeSession(struct OnvifSession *onvif_session)
+void initializeSession(struct OnvifSession* onvif_session)
 {
     getUUID(onvif_session->uuid);
     onvif_session->discovery_msg_id = 1;
     xmlInitParser();
-    for (int i = 0; i < 16; i++)
-        {
-            for (int j = 0; j < 1024; j++)
-                {
-                    onvif_session->active_network_interfaces[i][j] = '\0';
-                }
+    for (int i = 0; i < 16; i++) {
+        for (int j = 0; j < 1024; j++) {
+            onvif_session->active_network_interfaces[i][j] = '\0';
         }
-    for (int i = 0; i < 1024; i++)
-        {
-            onvif_session->primary_network_interface[i] = '\0';
-        }
+    }
+    for (int i = 0; i < 1024; i++) {
+        onvif_session->primary_network_interface[i] = '\0';
+    }
 #ifdef _WIN32
     WSADATA wsaData;
     WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -5180,7 +4898,7 @@ void initializeSession(struct OnvifSession *onvif_session)
     strcpy(preferred_network_address, onvif_session->preferred_network_address);
 }
 
-void closeSession(struct OnvifSession *onvif_session)
+void closeSession(struct OnvifSession* onvif_session)
 {
 #ifdef _WIN32
     WSACleanup();
@@ -5189,111 +4907,103 @@ void closeSession(struct OnvifSession *onvif_session)
 }
 
 bool prepareOnvifData(
-    int ordinal, struct OnvifSession *onvif_session,
-    struct OnvifData *onvif_data
+    int ordinal, struct OnvifSession* onvif_session,
+    struct OnvifData* onvif_data
 )
 {
     clearData(onvif_data);
     getCameraName(ordinal, onvif_session, onvif_data);
-    if (!extractXAddrs(ordinal, onvif_session, onvif_data)) return false;
+    if (!extractXAddrs(ordinal, onvif_session, onvif_data))
+        return false;
     extractOnvifService(onvif_data->device_service, true);
     extractHost(onvif_data->xaddrs, onvif_data->host);
     // getTimeOffset(onvif_data);
     return true;
 }
 
-int fillRTSPn(struct OnvifData *onvif_data, int profileIndex)
+int fillRTSPn(struct OnvifData* onvif_data, int profileIndex)
 {
     memset(onvif_data->last_error, 0, sizeof(onvif_data->last_error));
     int result = 0;
     result = getCapabilities(onvif_data);
-    if (result == 0)
-        {
-            result = getProfileToken(onvif_data, profileIndex);
-            if (result == 0) { result = getStreamUri(onvif_data); }
+    if (result == 0) {
+        result = getProfileToken(onvif_data, profileIndex);
+        if (result == 0) {
+            result = getStreamUri(onvif_data);
         }
+    }
     return result;
 }
 
-bool hasPTZ(struct OnvifData *onvif_data)
+bool hasPTZ(struct OnvifData* onvif_data)
 {
-    if (strcmp(onvif_data->ptz_service, "") == 0) return false;
-    else return true;
+    if (strcmp(onvif_data->ptz_service, "") == 0)
+        return false;
+    else
+        return true;
 }
 
-void dumpXmlNode(xmlDocPtr doc, xmlNodePtr cur_node, char *prefix)
+void dumpXmlNode(xmlDocPtr doc, xmlNodePtr cur_node, char* prefix)
 {
-    const char *name;
-    const char *value;
+    const char* name;
+    const char* value;
     char new_prefix[1024];
     char attr[128];
     xmlAttrPtr prop;
 
     /* Traverse the tree */
-    for (; cur_node; cur_node = cur_node->next)
-        {
-            if (cur_node->type == XML_ELEMENT_NODE)
-                {
-                    name = (char *)(cur_node->name);
-                    value = (const char *)xmlNodeListGetString(
-                        doc, cur_node->xmlChildrenNode, 1
-                    );
-                    if (value)
-                        {
-                            printf(
-                                "%s%s=%s\n", prefix ? prefix : "", name, value
-                            );
-                        }
-                    else
-                        {
-                            sprintf(
-                                new_prefix, "%s%s.", prefix ? prefix : "", name
-                            );
-                            for (prop = cur_node->properties; prop;
-                                 prop = prop->next)
-                                {
-                                    if (prop->children &&
-                                        prop->children->content)
-                                        {
-                                            printf(
-                                                "%s%s=%s\n", new_prefix,
-                                                prop->name,
-                                                prop->children->content
-                                            );
-                                        }
-                                }
-                        }
+    for (; cur_node; cur_node = cur_node->next) {
+        if (cur_node->type == XML_ELEMENT_NODE) {
+            name = (char*)(cur_node->name);
+            value = (const char*)xmlNodeListGetString(
+                doc, cur_node->xmlChildrenNode, 1
+            );
+            if (value) {
+                printf(
+                    "%s%s=%s\n", prefix ? prefix : "", name, value
+                );
+            } else {
+                sprintf(
+                    new_prefix, "%s%s.", prefix ? prefix : "", name
+                );
+                for (prop = cur_node->properties; prop;
+                     prop = prop->next) {
+                    if (prop->children && prop->children->content) {
+                        printf(
+                            "%s%s=%s\n", new_prefix,
+                            prop->name,
+                            prop->children->content
+                        );
+                    }
                 }
-            dumpXmlNode(doc, cur_node->children, new_prefix);
+            }
         }
+        dumpXmlNode(doc, cur_node->children, new_prefix);
+    }
 }
 
 /* Dump xml document */
 void dumpReply(xmlDocPtr reply)
 {
-    if (reply != NULL)
-        {
-            xmlChar *xpath = BAD_CAST "//s:Body/*";
-            xmlXPathObjectPtr body = getNodeSet(reply, xpath);
-            if (body)
-                {
-                    xmlNodeSetPtr nodeset = body->nodesetval;
-                    for (int i = 0; i < nodeset->nodeNr; i++)
-                        {
-                            xmlNodePtr cur = nodeset->nodeTab[i];
-                            /* Skip error return */
-                            if (strcmp((char *)cur->name, "Fault") != 0)
-                                {
-                                    printf("[%s]\n", cur->name);
-                                    dumpXmlNode(reply, cur->children, NULL);
-                                }
-                        }
+    if (reply != NULL) {
+        xmlChar* xpath = BAD_CAST "//s:Body/*";
+        xmlXPathObjectPtr body = getNodeSet(reply, xpath);
+        if (body) {
+            xmlNodeSetPtr nodeset = body->nodesetval;
+            for (int i = 0; i < nodeset->nodeNr; i++) {
+                xmlNodePtr cur = nodeset->nodeTab[i];
+                /* Skip error return */
+                if (strcmp((char*)cur->name, "Fault") != 0) {
+                    printf("[%s]\n", cur->name);
+                    dumpXmlNode(reply, cur->children, NULL);
                 }
+            }
         }
+    }
 }
 
 /* Dump all available onvif device configuration */
-void dumpConfigAll(struct OnvifData *onvif_data)
+void dumpConfigAll(struct OnvifData* onvif_data)
 {
     xmlDocPtr reply;
 
