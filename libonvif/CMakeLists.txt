@@ -1,7 +1,7 @@
 #*******************************************************************************
 # libonvif/libonvif/CMakeLists.txt
 #
-# Copyright (c) 2023, 2024 Stephen Rhodes 
+# Copyright (c) 2023, 2024 Stephen Rhodes
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,12 +19,6 @@
 #
 #******************************************************************************/
 
-cmake_minimum_required(VERSION 3.17)
-
-project(libonvif VERSION 3.2.6)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 if (DEFINED ENV{LIBXML2_INCLUDE_DIRS})
     set(LIBXML2_INCLUDE_DIRS $ENV{LIBXML2_INCLUDE_DIRS})
@@ -32,37 +26,20 @@ if (DEFINED ENV{LIBXML2_INCLUDE_DIRS})
 else()
     find_package(LibXml2 REQUIRED)
 endif()
+set(LIBONVIF_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE PATH "libonvif include dir")
+include_directories(${LIBXML2_INCLUDE_DIRS} ${LIBONVIF_INCLUDE_DIR})
 
-add_subdirectory(pybind11)
+file(GLOB LIB_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
+file(GLOB LIB_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h)
 
-pybind11_add_module(pyonvif
-    src/onvif.cpp
-    src/onvif.c
-    src/cencode.c
-    src/sha1.c
+add_library(onvif ${LIB_SOURCES} ${LIB_HEADERS})
+target_link_libraries(onvif ${LIBXML2_LIBRARIES})
+
+install(TARGETS onvif
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        INCLUDES DESTINATION include/onvif
 )
+install(DIRECTORY ${LIBONVIF_INCLUDE_DIR} DESTINATION ./include/onvif)
 
-set_target_properties(pyonvif PROPERTIES
-    OUTPUT_NAME libonvif
-)
-
-target_link_libraries(pyonvif PRIVATE
-    ${LIBXML2_LIBRARIES}
-)
-
-message("-- LIBXML2_INCLUDE_DIRS: " ${LIBXML2_INCLUDE_DIRS})
-message("-- LIBXML2_LIBRARIES: " ${LIBXML2_LIBRARIES})
-
-target_include_directories(pyonvif PUBLIC
-    include
-    ${LIBXML2_INCLUDE_DIRS}
-)
-
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    set_target_properties(pyonvif PROPERTIES
-        BUILD_RPATH "$ORIGIN"
-        BUILD_RPATH_USE_ORIGIN TRUE
-        INSTALL_RPATH "$ORIGIN"
-        INSTALL_RPATH_USE_ORIGIN TRUE
-    )
-endif()

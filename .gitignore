@@ -19,3 +19,5 @@ assets/scripts/components/mac/*.pkg
 runs/
 .DS_Store
 cache/
+.cache/
+
