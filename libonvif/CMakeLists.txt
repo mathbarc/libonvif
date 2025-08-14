@@ -20,12 +20,7 @@
 #******************************************************************************/
 
 
-if (DEFINED ENV{LIBXML2_INCLUDE_DIRS})
-    set(LIBXML2_INCLUDE_DIRS $ENV{LIBXML2_INCLUDE_DIRS})
-    set(LIBXML2_LIBRARIES $ENV{LIBXML2_LIBRARIES})
-else()
-    find_package(LibXml2 REQUIRED)
-endif()
+find_package(LibXml2 REQUIRED)
 set(LIBONVIF_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE PATH "libonvif include dir")
 include_directories(${LIBXML2_INCLUDE_DIRS} ${LIBONVIF_INCLUDE_DIR})
 
@@ -35,11 +30,38 @@ file(GLOB LIB_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h)
 add_library(onvif ${LIB_SOURCES} ${LIB_HEADERS})
 target_link_libraries(onvif ${LIBXML2_LIBRARIES})
 
-install(TARGETS onvif
+install(TARGETS onvif EXPORT LibOnvif
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
         INCLUDES DESTINATION include/onvif
 )
-install(DIRECTORY ${LIBONVIF_INCLUDE_DIR} DESTINATION ./include/onvif)
+install(DIRECTORY ${LIBONVIF_INCLUDE_DIR}/ DESTINATION ./include/onvif/)
 
+include(GenerateExportHeader)
+generate_export_header(onvif)
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/cmake/LibOnvifConfigVersion.cmake"
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY AnyNewerVersion)
+
+export(
+  EXPORT LibOnvif
+  FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/LibOnvifTargets.cmake"
+)
+configure_file(
+  LibOnvifConfig.cmake
+  "${CMAKE_CURRENT_BINARY_DIR}/cmake/LibOnvifConfig.cmake"
+  COPYONLY)
+
+set(ConfigPackageLocation lib/cmake/libonvif)
+install(
+  EXPORT LibOnvif
+  FILE LibOnvifTargets.cmake
+  DESTINATION ${ConfigPackageLocation})
+install(
+  FILES
+    LibOnvifConfig.cmake
+    "${CMAKE_CURRENT_BINARY_DIR}/cmake/LibOnvifConfigVersion.cmake"
+  DESTINATION ${ConfigPackageLocation})
