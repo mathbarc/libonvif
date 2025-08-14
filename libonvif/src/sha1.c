@@ -3,30 +3,35 @@ SHA-1 in C
 By Steve Reid <steve@edmweb.com>
 100% Public Domain
 
-The person or persons who have associated work with this document (the "Dedicator" or "Certifier") 
-hereby either (a) certifies that, to the best of his knowledge, the work of authorship identified 
-is in the public domain of the country from which the work is published, or (b) hereby dedicates 
-whatever copyright the dedicators holds in the work of authorship identified below (the "Work") to 
-the public domain. A certifier, moreover, dedicates any copyright interest he may have in the 
-associated work, and for these purposes, is described as a "dedicator" below.
+The person or persons who have associated work with this document (the
+"Dedicator" or "Certifier") hereby either (a) certifies that, to the best of his
+knowledge, the work of authorship identified is in the public domain of the
+country from which the work is published, or (b) hereby dedicates whatever
+copyright the dedicators holds in the work of authorship identified below (the
+"Work") to the public domain. A certifier, moreover, dedicates any copyright
+interest he may have in the associated work, and for these purposes, is
+described as a "dedicator" below.
 
-A certifier has taken reasonable steps to verify the copyright status of this work. Certifier 
-recognizes that his good faith efforts may not shield him from liability if in fact the work certified 
-is not in the public domain.
+A certifier has taken reasonable steps to verify the copyright status of this
+work. Certifier recognizes that his good faith efforts may not shield him from
+liability if in fact the work certified is not in the public domain.
 
-Dedicator makes this dedication for the benefit of the public at large and to the detriment of the 
-Dedicator's heirs and successors. Dedicator intends this dedication to be an overt act of relinquishment 
-in perpetuity of all present and future rights under copyright law, whether vested or contingent, in the 
-Work. Dedicator understands that such relinquishment of all rights includes the relinquishment of all 
-rights to enforce (by lawsuit or otherwise) those copyrights in the Work.
+Dedicator makes this dedication for the benefit of the public at large and to
+the detriment of the Dedicator's heirs and successors. Dedicator intends this
+dedication to be an overt act of relinquishment in perpetuity of all present and
+future rights under copyright law, whether vested or contingent, in the Work.
+Dedicator understands that such relinquishment of all rights includes the
+relinquishment of all rights to enforce (by lawsuit or otherwise) those
+copyrights in the Work.
 
-Dedicator recognizes that, once placed in the public domain, the Work may be freely reproduced, distributed, 
-transmitted, used, modified, built upon, or otherwise exploited by anyone for any purpose, commercial or 
-non-commercial, and in any way, including by methods that have not yet been invented or conceived.
+Dedicator recognizes that, once placed in the public domain, the Work may be
+freely reproduced, distributed, transmitted, used, modified, built upon, or
+otherwise exploited by anyone for any purpose, commercial or non-commercial, and
+in any way, including by methods that have not yet been invented or conceived.
 
 CC0 for Public Domain Dedication
-This tool is based on United States law and may not be applicable outside the US. For dedicating new works 
-to the public domain, we recommend CC0.
+This tool is based on United States law and may not be applicable outside the
+US. For dedicating new works to the public domain, we recommend CC0.
 
 Test Vectors (from FIPS PUB 180-1)
 "abc"
@@ -50,47 +55,56 @@ A million repetitions of "a"
 
 #include "sha1.h"
 
-
 #define rol(value, bits) (((value) << (bits)) | ((value) >> (32 - (bits))))
 
 /* blk0() and blk() perform the initial expand. */
 /* I got the idea of expanding during the round function from SSLeay */
 #if BYTE_ORDER == LITTLE_ENDIAN
-#define blk0(i) (block->l[i] = (rol(block->l[i],24)&0xFF00FF00) \
-    |(rol(block->l[i],8)&0x00FF00FF))
+#define blk0(i)                                                                \
+    (block->l[i] = (rol(block->l[i], 24) & 0xFF00FF00) |                       \
+                   (rol(block->l[i], 8) & 0x00FF00FF))
 #elif BYTE_ORDER == BIG_ENDIAN
 #define blk0(i) block->l[i]
 #else
 #error "Endianness not defined!"
 #endif
-#define blk(i) (block->l[i&15] = rol(block->l[(i+13)&15]^block->l[(i+8)&15] \
-    ^block->l[(i+2)&15]^block->l[i&15],1))
+#define blk(i)                                                                 \
+    (block->l[i & 15] =                                                        \
+         rol(block->l[(i + 13) & 15] ^ block->l[(i + 8) & 15] ^                \
+                 block->l[(i + 2) & 15] ^ block->l[i & 15],                    \
+             1))
 
 /* (R0+R1), R2, R3, R4 are the different operations used in SHA1 */
-#define R0(v,w,x,y,z,i) z+=((w&(x^y))^y)+blk0(i)+0x5A827999+rol(v,5);w=rol(w,30);
-#define R1(v,w,x,y,z,i) z+=((w&(x^y))^y)+blk(i)+0x5A827999+rol(v,5);w=rol(w,30);
-#define R2(v,w,x,y,z,i) z+=(w^x^y)+blk(i)+0x6ED9EBA1+rol(v,5);w=rol(w,30);
-#define R3(v,w,x,y,z,i) z+=(((w|x)&y)|(w&x))+blk(i)+0x8F1BBCDC+rol(v,5);w=rol(w,30);
-#define R4(v,w,x,y,z,i) z+=(w^x^y)+blk(i)+0xCA62C1D6+rol(v,5);w=rol(w,30);
-
+#define R0(v, w, x, y, z, i)                                                   \
+    z += ((w & (x ^ y)) ^ y) + blk0(i) + 0x5A827999 + rol(v, 5);               \
+    w = rol(w, 30);
+#define R1(v, w, x, y, z, i)                                                   \
+    z += ((w & (x ^ y)) ^ y) + blk(i) + 0x5A827999 + rol(v, 5);                \
+    w = rol(w, 30);
+#define R2(v, w, x, y, z, i)                                                   \
+    z += (w ^ x ^ y) + blk(i) + 0x6ED9EBA1 + rol(v, 5);                        \
+    w = rol(w, 30);
+#define R3(v, w, x, y, z, i)                                                   \
+    z += (((w | x) & y) | (w & x)) + blk(i) + 0x8F1BBCDC + rol(v, 5);          \
+    w = rol(w, 30);
+#define R4(v, w, x, y, z, i)                                                   \
+    z += (w ^ x ^ y) + blk(i) + 0xCA62C1D6 + rol(v, 5);                        \
+    w = rol(w, 30);
 
 /* Hash a single 512-bit block. This is the core of the algorithm. */
 
-void SHA1Transform(
-    uint32_t state[5],
-    const unsigned char buffer[64]
-)
+void SHA1Transform(uint32_t state[5], const unsigned char buffer[64])
 {
     uint32_t a, b, c, d, e;
 
     typedef union
     {
-        unsigned char c[64];
-        uint32_t l[16];
+            unsigned char c[64];
+            uint32_t l[16];
     } CHAR64LONG16;
 
 #ifdef SHA1HANDSOFF
-    CHAR64LONG16 block[1];      /* use array to appear as a pointer */
+    CHAR64LONG16 block[1]; /* use array to appear as a pointer */
 
     memcpy(block, buffer, 64);
 #else
@@ -99,7 +113,7 @@ void SHA1Transform(
      * And the result is written through.  I threw a "const" in, hoping
      * this will cause a diagnostic.
      */
-    CHAR64LONG16 *block = (const CHAR64LONG16 *) buffer;
+    CHAR64LONG16 *block = (const CHAR64LONG16 *)buffer;
 #endif
     /* Copy context->state[] to working vars */
     a = state[0];
@@ -201,12 +215,9 @@ void SHA1Transform(
 #endif
 }
 
-
 /* SHA1Init - Initialize new context */
 
-void SHA1Init(
-    SHA1_CTX * context
-)
+void SHA1Init(SHA1_CTX *context)
 {
     /* SHA1 initialization constants */
     context->state[0] = 0x67452301;
@@ -217,46 +228,35 @@ void SHA1Init(
     context->count[0] = context->count[1] = 0;
 }
 
-
 /* Run your data through this. */
 
-void SHA1Update(
-    SHA1_CTX * context,
-    const unsigned char *data,
-    uint32_t len
-)
+void SHA1Update(SHA1_CTX *context, const unsigned char *data, uint32_t len)
 {
     uint32_t i;
 
     uint32_t j;
 
     j = context->count[0];
-    if ((context->count[0] += len << 3) < j)
-        context->count[1]++;
+    if ((context->count[0] += len << 3) < j) context->count[1]++;
     context->count[1] += (len >> 29);
     j = (j >> 3) & 63;
     if ((j + len) > 63)
-    {
-        memcpy(&context->buffer[j], data, (i = 64 - j));
-        SHA1Transform(context->state, context->buffer);
-        for (; i + 63 < len; i += 64)
         {
-            SHA1Transform(context->state, &data[i]);
+            memcpy(&context->buffer[j], data, (i = 64 - j));
+            SHA1Transform(context->state, context->buffer);
+            for (; i + 63 < len; i += 64)
+                {
+                    SHA1Transform(context->state, &data[i]);
+                }
+            j = 0;
         }
-        j = 0;
-    }
-    else
-        i = 0;
+    else i = 0;
     memcpy(&context->buffer[j], &data[i], len - i);
 }
 
-
 /* Add padding and return the message digest. */
 
-void SHA1Final(
-    unsigned char digest[20],
-    SHA1_CTX * context
-)
+void SHA1Final(unsigned char digest[20], SHA1_CTX *context)
 {
     unsigned i;
 
@@ -264,7 +264,7 @@ void SHA1Final(
 
     unsigned char c;
 
-#if 0    /* untested "improvement" by DHR */
+#if 0 /* untested "improvement" by DHR */
     /* Convert context->count to a sequence of bytes
      * in finalcount.  Second element first, but
      * big-endian order within element.
@@ -282,40 +282,38 @@ void SHA1Final(
             *--fcp = (unsigned char) t}
 #else
     for (i = 0; i < 8; i++)
-    {
-        finalcount[i] = (unsigned char) ((context->count[(i >= 4 ? 0 : 1)] >> ((3 - (i & 3)) * 8)) & 255);      /* Endian independent */
-    }
+        {
+            finalcount[i] = (unsigned char
+            )((context->count[(i >= 4 ? 0 : 1)] >> ((3 - (i & 3)) * 8)) & 255
+            ); /* Endian independent */
+        }
 #endif
     c = 0200;
     SHA1Update(context, &c, 1);
     while ((context->count[0] & 504) != 448)
-    {
-        c = 0000;
-        SHA1Update(context, &c, 1);
-    }
+        {
+            c = 0000;
+            SHA1Update(context, &c, 1);
+        }
     SHA1Update(context, finalcount, 8); /* Should cause a SHA1Transform() */
     for (i = 0; i < 20; i++)
-    {
-        digest[i] = (unsigned char)
-            ((context->state[i >> 2] >> ((3 - (i & 3)) * 8)) & 255);
-    }
+        {
+            digest[i] = (unsigned char
+            )((context->state[i >> 2] >> ((3 - (i & 3)) * 8)) & 255);
+        }
     /* Wipe variables */
     memset(context, '\0', sizeof(*context));
     memset(&finalcount, '\0', sizeof(finalcount));
 }
 
-void SHA1(
-    char *hash_out,
-    const char *str,
-    int len)
+void SHA1(char *hash_out, const char *str, int len)
 {
     SHA1_CTX ctx;
     unsigned int ii;
 
     SHA1Init(&ctx);
-    for (ii=0; ii<len; ii+=1)
-        SHA1Update(&ctx, (const unsigned char*)str + ii, 1);
+    for (ii = 0; ii < len; ii += 1)
+        SHA1Update(&ctx, (const unsigned char *)str + ii, 1);
     SHA1Final((unsigned char *)hash_out, &ctx);
     hash_out[20] = '\0';
 }
-
