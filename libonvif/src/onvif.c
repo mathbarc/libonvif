@@ -19,9 +19,9 @@
  *
  *******************************************************************************/
 
-#include "libxml/xpathInternals.h"
 #include <libxml/parser.h>
 #include <libxml/xpath.h>
+#include <libxml/xpathInternals.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -2981,7 +2981,7 @@ void getActiveNetworkInterfaces(struct OnvifSession* onvif_session)
     if (pAdapterInfo)
         free(pAdapterInfo);
 
-        // printf("Primary Interface: %s\n", onvif_session->primary_network_interface);
+    // printf("Primary Interface: %s\n", onvif_session->primary_network_interface);
 
 #else
     struct ifaddrs* ifaddr;
