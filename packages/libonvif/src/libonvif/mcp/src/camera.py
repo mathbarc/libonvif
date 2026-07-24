@@ -98,7 +98,7 @@ async def stream_camera(camera_device_information_serial_number: str, camera_med
         A message indicating success or failure
     """
     #http://10.1.1.76:8889/AMC014641NE6L35AT8/MediaProfile000
-    url = f"http://{os.environ.get("STREAM_SERVER_IP")}:8889/{camera_device_information_serial_number}/{camera_media_profile_token}"
+    url = f"http://{os.environ.get('STREAM_SERVER_IP')}:8889/{camera_device_information_serial_number}/{camera_media_profile_token}"
     opened = webbrowser.open(url)
     if opened:
         return f"Opened {url} in default browser."
@@ -166,7 +166,7 @@ async def show_snapshot_in_browser(url: str) -> str:
     if not (url.startswith("http://") or url.startswith("https://")):
         return f"Refused to open '{url}': must start with http:// or https://"
 
-    curl = f"{url[:7]}{os.environ.get("CAMERA_USERNAME", "")}:{os.environ.get("CAMERA_PASSWORD", "")}@{url[7:]}"
+    curl = f"{url[:7]}{os.environ.get('CAMERA_USERNAME', '')}:{os.environ.get('CAMERA_PASSWORD', '')}@{url[7:]}"
     opened = webbrowser.open(curl)
     if opened:
         return f"Opened {url} in default browser."
@@ -212,7 +212,7 @@ async def get_cameras() -> str:
                        camera_filled=camera_filled,
                        use_threads=True)
     
-    logger.debug(f"Found {len(cameras)} {"camera" if len(cameras) == 1 else "cameras"}")
+    logger.debug(f"Found {len(cameras)} {'camera' if len(cameras) == 1 else 'cameras'}")
 
     names = []
     for camera in cameras:

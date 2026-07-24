@@ -32,4 +32,4 @@ if __name__ == "__main__":
                        camera_filled=camera_filled, 
                        use_threads=False)
 
-    print(f"Found {len(cameras)} {"camera" if len(cameras) == 1 else "cameras"}")
+    print(f"Found {len(cameras)} {'camera' if len(cameras) == 1 else 'cameras'}")

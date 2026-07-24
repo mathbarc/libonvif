@@ -233,7 +233,7 @@ def parse_profiles_response(xml: str) -> GetProfilesResponse:
                 name=text(video_encoder, "tt:Name"),
                 use_count=int_text(video_encoder, "tt:UseCount"),
                 encoding=encoding,
-                resolution=f"{int_text(video_encoder, "tt:Resolution/tt:Width")} x {int_text(video_encoder, "tt:Resolution/tt:Height")}",
+                resolution=f"{int_text(video_encoder, 'tt:Resolution/tt:Width')} x {int_text(video_encoder, 'tt:Resolution/tt:Height')}",
                 quality=float_text(video_encoder, "tt:Quality"),
                 rate_control=RateControl(
                     frame_rate_limit=int_text(
