@@ -719,7 +719,8 @@ utc date time: {u.date.year}-{u.date.month:02}-{u.date.day:02} {u.time.hour:02}:
             else:
                 cameras = discover(self.ip_address, get_camera_credentials, on_error=self.on_error, camera_filled=camera_filled)
 
-            self.debug_log.write(f"Found {len(cameras)} {"camera" if len(cameras) == 1 else "cameras"}")
+            cam_word = "camera" if len(cameras) == 1 else "cameras"
+            self.debug_log.write(f"Found {len(cameras)} {cam_word}")
         except Exception as ex:
             self.debug_log.write(f"Discovery error: {ex}")
             print(traceback.format_exc(), flush=True)
