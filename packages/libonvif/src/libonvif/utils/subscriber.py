@@ -6,6 +6,7 @@ import ipaddress
 import socket
 from threading import Timer, RLock
 import psutil
+import sys
 from libonvif.devices.camera import Camera, unsubscribe, subscribe_event, \
     create_pull_point_subscription, create_pull_point_subscriptions, \
     subscribe_events
@@ -53,7 +54,7 @@ class SubscriptionManager:
             if camera.on_error:
                 camera.on_error(camera.xaddr, Exception(f"unsubscribe events error: {ex}"))
             else:
-                print(traceback.format_exc(), flush=True)
+                print(traceback.format_exc(), flush=True, file=sys.stderr)
 
     def schedule_resubscribe_event(self, camera: Camera, server_ip_address: str, port: int, delay: float, event: str | None) -> Timer:
         timer = Timer(
@@ -93,7 +94,7 @@ class SubscriptionManager:
             if camera.on_error: 
                 camera.on_error(camera.xaddr, Exception(f"resubscribe event error: {ex}"))
             else:
-                print(traceback.format_exc(), flush=True)
+                print(traceback.format_exc(), flush=True, file=sys.stderr)
 
     def schedule_resubscribe_events(self, camera: Camera, server_ip_address: str, port: int, delay: float, events: list[str]) -> Timer:
         timer = Timer(
@@ -133,7 +134,7 @@ class SubscriptionManager:
             if camera.on_error:
                 camera.on_error(camera.xaddr, Exception(f"resubscribe event error: {ex}"))
             else:
-                print(traceback.format_exc(), flush=True)
+                print(traceback.format_exc(), flush=True, file=sys.stderr)
 
     def subscribe_pull_event(self, camera: Camera, event: str | None = None) -> None:
         try:
@@ -150,7 +151,7 @@ class SubscriptionManager:
             if camera.on_error:
                 camera.on_error(camera.xaddr, Exception(f"subscribe pull event error: {ex}"))
             else:
-                print(traceback.format_exc(), flush=True)
+                print(traceback.format_exc(), flush=True, file=sys.stderr)
     
     def subscribe_pull_events(self, camera: Camera, events: list[str]) -> None:
         try:
@@ -167,4 +168,4 @@ class SubscriptionManager:
             if camera.on_error:
                 camera.on_error(camera.xaddr, Exception(f"subscribe pull events error: {ex}"))
             else:
-                print(traceback.format_exc(), flush=True)
+                print(traceback.format_exc(), flush=True, file=sys.stderr)

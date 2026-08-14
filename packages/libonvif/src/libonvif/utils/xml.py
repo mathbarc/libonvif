@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 from lxml import etree
+import sys
 
 NS = {
     "s": "http://www.w3.org/2003/05/soap-envelope",
@@ -36,7 +37,7 @@ def text(elem: etree._Element, path: str) -> Optional[str]:
             return "".join(found.itertext()).strip()
         return str(found).strip()
     except Exception as ex:
-        print(f"text parsing exception: {ex}")
+        print(f"text parsing exception: {ex}", file=sys.stderr)
     return ""
 
 def text_list(elem: etree._Element, path: str) -> list[str]:
@@ -51,7 +52,7 @@ def text_list(elem: etree._Element, path: str) -> list[str]:
             if value:
                 values.append(value)
     except Exception as ex:
-        print(f"text_list exception: {ex}")
+        print(f"text_list exception: {ex}", file=sys.stderr)
     return values
 
 def bool_text(elem: etree._Element, path: str) -> Optional[bool]:
@@ -83,6 +84,6 @@ def get_xml_value(xml: str, xpath: str) -> str:
             return "".join(found.itertext()).strip()
         return str(found).strip()
     except Exception as ex:
-        print(f'get_xml_value exception: {ex}')
+        print(f'get_xml_value exception: {ex}', file=sys.stderr)
     return ""
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import base64
 import hashlib
 import niquests as requests
@@ -94,7 +95,7 @@ def build_soap_envelope(body: str, username: str, password: str, time_offset: in
 
 def onvif_post(url: str, body: str, username: str, password: str, time_offset: int) -> str:
     if os.environ.get("LIBONVIF_VERBOSE"):
-        print(f"XML Input:\n{body}\n")
+        print(f"XML Input:\n{body}\n", file=sys.stderr)
     soap = build_soap_envelope(body, username, password, time_offset)
     headers = {
         "User-Agent": "Generic",
@@ -104,7 +105,7 @@ def onvif_post(url: str, body: str, username: str, password: str, time_offset: i
     }
     response = requests.post(url, data=soap, headers=headers, timeout=POST_TIMEOUT)
     if os.environ.get("LIBONVIF_VERBOSE"):
-        print(f"Camera Response:\n{response.text}\n")
+        print(f"Camera Response:\n{response.text}\n", file=sys.stderr)
     fault = parse_soap_fault(response.text)
     if fault:
         raise ValueError(f"Input:\n{body}\n\nFault:\n{fault}\n\nURL:\n{url}")

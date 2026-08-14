@@ -20,6 +20,7 @@ import struct
 from typing import Any
 from io import StringIO
 import os
+import sys
 import traceback
 
 from libonvif.datastructures.capabilities import Capabilities, parse_capabilities_response
@@ -121,7 +122,6 @@ def safe_run(func):
                 camera = arg
                 break 
         if not camera:
-            print("camera is None")
             return
         
         try:
@@ -135,7 +135,7 @@ def safe_run(func):
             if camera.on_error:
                 camera.on_error(camera.xaddr, ex)                
             else:
-                print(traceback.format_exc())
+                print(traceback.format_exc(), file=sys.stderr)
             return None
     return wrapper
 
@@ -554,7 +554,6 @@ def modify_preset_tour(camera: Camera, profile_token: str, preset_tour: PresetTo
     auto_start = "true" if preset_tour.auto_start else "false"
     spots = []
     for spot in preset_tour.spots:
-        #print(f"detail: {spot.preset_token} stay_time: {spot.stay_time}")
         spot_xml = f"""
         <tt:TourSpot>
             <tt:PresetDetail>
@@ -901,7 +900,6 @@ def pull_messages(camera: Camera, subscription_reference_xaddr: str) -> str:
 
 @safe_run
 def subscribe_event(camera: Camera, ip_address: str, port: int, event: str | None = None) -> str:
-    #print(f"Subscribing to port {port}: {event}")
     callback_url = f"http://{ip_address}:{port}/onvif/events"
     initial_termination_time = "PT10M"
 
@@ -1131,7 +1129,7 @@ def get_camera(xaddr: str, name: str, get_camera_credentials: Callable[[Camera],
             camera.errors += msg
         if camera.on_error:
             camera.on_error(camera.xaddr, ex)
-        #print(traceback.format_exc())
+        print(traceback.format_exc(), file=sys.stderr)
 
     return camera
 
@@ -1149,7 +1147,6 @@ def discover(ip_address: str,
              use_threads = True
              ) -> list[Camera]:
     
-    print(f"Discovering cameras on {ip_address}...")
     cameras = []
     camera_jobs = []
     msg_id = uuid.uuid4()
@@ -1170,7 +1167,7 @@ def discover(ip_address: str,
             data, addr = sock.recvfrom(receiver_buffer_size)
             response = data.decode("utf-8", errors="ignore")
             if os.environ.get("LIBONVIF_VERBOSE"):
-               print(f"Received response from {addr[0]}:\n{response}\n")
+               print(f"Received response from {addr[0]}:\n{response}\n", file=sys.stderr)
             responses.append(response)
         except socket.timeout:
             break
