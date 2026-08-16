@@ -913,4 +913,9 @@ This value defines stream session behavior and
 is typically expressed as an XML duration.
 """,
 
+    "network_interfaces.[*].ipv4.manual":
+"""
+To change the IP address manually, use the address
+and the prefix length, e.g. 10.1.1.99 / 24.
+"""
 }

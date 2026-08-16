@@ -31,7 +31,7 @@ import re
 from threading import RLock
 from datetime import datetime, timezone
 import sys
-
+from pathlib import Path
 
 
 from libonvif.datastructures.datetime import Date, DateTime, SystemDateAndTime,  NTPInformation, Time, TimeZone, \
@@ -40,9 +40,20 @@ import time
 
 PORT = 8856
 
+def _get_version():
+    version = None
+    current_file = Path(__file__)
+    filename = Path(current_file.parent.parent.parent) / "pyproject.toml"
+    with open(filename, "r") as f:
+        for line in f:
+            if line.startswith("version"):
+                version = line.split("=")[1].strip().strip('"')
+                break
+    return version
+
 class ObjectBrowser(App):
 
-    TITLE="Onvif TUI"
+    TITLE=f"Onvif TUI {_get_version()}"
 
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__()
@@ -56,6 +67,7 @@ class ObjectBrowser(App):
         self.subscription_lock = RLock()
         self.event_server = None
         self.subscription_manager = SubscriptionManager(self.ip_address)
+
 
     BINDINGS = [
         ("q", "quit", "Quit"),

@@ -173,6 +173,7 @@ def get_system_date_and_time(url: str) -> SystemDateAndTime:
     response.raise_for_status()
     return parse_system_date_and_time_response(response.text)
 
+@safe_run
 def get_time_offset(camera: Camera) -> None:
     sdt = get_system_date_and_time(camera.xaddr)
     setattr(camera, "system_date_and_time", sdt)
@@ -284,6 +285,7 @@ def set_ntp(camera: Camera) -> str:
 # these two queries come first in camera data population and will trigger authorization execptions if the credentials are not correct
 # some cameras may allow get_capabilities without authorization, so both are needed for a proper credential check
 # the @safe_run decorator is not used, the authorization exception is an opportunity to collect credentials from the user
+@safe_run
 def get_capabilities(camera: Camera) -> None:
     body = """
 <tds:GetCapabilities>

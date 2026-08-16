@@ -826,7 +826,7 @@ wheels = [
 
 [[package]]
 name = "libonvif"
-version = "4.0.24"
+version = "4.0.25"
 source = { editable = "packages/libonvif" }
 dependencies = [
     { name = "lxml" },
@@ -1354,7 +1354,7 @@ wheels = [
 
 [[package]]
 name = "onvif-tui"
-version = "1.0.10"
+version = "1.0.11"
 source = { editable = "packages/onvif-tui" }
 dependencies = [
     { name = "libonvif" },
