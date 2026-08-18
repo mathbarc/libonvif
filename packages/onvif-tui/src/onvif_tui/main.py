@@ -32,7 +32,7 @@ from threading import RLock
 from datetime import datetime, timezone
 import sys
 from pathlib import Path
-
+from importlib.metadata import PackageNotFoundError, version
 
 from libonvif.datastructures.datetime import Date, DateTime, SystemDateAndTime,  NTPInformation, Time, TimeZone, \
         parse_system_date_and_time_response, parse_ntp_response
@@ -41,15 +41,12 @@ import time
 PORT = 8856
 
 def _get_version():
-    version = None
-    current_file = Path(__file__)
-    filename = Path(current_file.parent.parent.parent) / "pyproject.toml"
-    with open(filename, "r") as f:
-        for line in f:
-            if line.startswith("version"):
-                version = line.split("=")[1].strip().strip('"')
-                break
-    return version
+    try:
+        __version__ = version("onvif-tui")
+    except PackageNotFoundError:
+        # package is not installed (e.g. running locally during development)
+        __version__ = "0.0.0"
+    return __version__
 
 class ObjectBrowser(App):
 
